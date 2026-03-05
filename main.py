@@ -17,15 +17,15 @@ import argparse
 import time
 from loguru import logger
 
-from config.settings import settings
-from agents.whale_agent     import WhaleAgent
-from agents.technical_agent import TechnicalAgent
-from agents.liquidity_agent import LiquidityAgent
-from agents.sentiment_agent import SentimentAgent
-from agents.arbitrage_agent import ArbitrageAgent
-from agents.discovery_agent import DiscoveryAgent
-from consensus.colony_brain import ColonyBrain
-from execution.trader       import ColonyTrader
+from settings import settings
+from whale_agent import WhaleAgent
+from technical_agent import TechnicalAgent
+from liquidity_agent import LiquidityAgent
+from sentiment_agent import SentimentAgent
+from arbitrage_agent import ArbitrageAgent
+from discovery_agent import DiscoveryAgent
+from colony_brain import ColonyBrain
+from trader import ColonyTrader
 
 
 # ── Tokens to track ───────────────────────────────────────────────────

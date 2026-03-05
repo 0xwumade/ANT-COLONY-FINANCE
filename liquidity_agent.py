@@ -10,8 +10,8 @@ import asyncio
 import aiohttp
 from loguru import logger
 
-from agents.base_agent import BaseAgent, PheromoneSignal, Signal
-from config.settings import settings
+from base_agent import BaseAgent, PheromoneSignal, Signal
+from settings import settings
 
 
 # Uniswap V3 subgraph on Base (via The Graph)

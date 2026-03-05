@@ -21,8 +21,8 @@ from typing import Optional
 import redis.asyncio as aioredis
 from loguru import logger
 
-from agents.base_agent import PheromoneSignal, Signal
-from config.settings import settings
+from base_agent import PheromoneSignal, Signal
+from settings import settings
 
 
 @dataclass

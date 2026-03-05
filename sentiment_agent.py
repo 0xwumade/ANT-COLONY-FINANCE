@@ -10,8 +10,8 @@ import re
 from textblob import TextBlob
 from loguru import logger
 
-from agents.base_agent import BaseAgent, PheromoneSignal, Signal
-from config.settings import settings
+from base_agent import BaseAgent, PheromoneSignal, Signal
+from settings import settings
 
 
 TWITTER_API_BASE  = "https://api.twitter.com/2"

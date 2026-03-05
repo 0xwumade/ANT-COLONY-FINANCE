@@ -18,8 +18,8 @@ from typing import Optional
 from loguru import logger
 
 from cdp import CdpClient
-from config.settings import settings
-from consensus.colony_brain import ColonyDecision
+from settings import settings
+from colony_brain import ColonyDecision
 
 
 # Base token addresses

@@ -8,8 +8,8 @@ import aiohttp
 import numpy as np
 from loguru import logger
 
-from agents.base_agent import BaseAgent, PheromoneSignal, Signal
-from config.settings import settings
+from base_agent import BaseAgent, PheromoneSignal, Signal
+from settings import settings
 
 
 COINGECKO_BASE = "https://api.coingecko.com/api/v3"
