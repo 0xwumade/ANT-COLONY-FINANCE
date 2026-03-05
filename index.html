@@ -287,8 +287,8 @@
   /* Ants animation */
   .ant-trail-visual {
     position: relative;
-    height: 3px;
-    background: var(--border);
+    height: 20px;
+    background: transparent;
     border-radius: 2px;
     overflow: visible;
     margin: 16px 0 8px;
@@ -296,16 +296,13 @@
 
   .ant {
     position: absolute;
-    width: 4px;
-    height: 4px;
-    background: var(--amber);
-    border-radius: 50%;
-    top: -1px;
+    font-size: 16px;
+    top: 0;
     animation: march linear infinite;
   }
 
   @keyframes march {
-    from { left: -10px; opacity: 0; }
+    from { left: -20px; opacity: 0; }
     10%  { opacity: 1; }
     90%  { opacity: 1; }
     to   { left: calc(100% + 10px); opacity: 0; }
@@ -612,6 +609,7 @@ function spawnAnts() {
   for (let i = 0; i < 8; i++) {
     const ant = document.createElement('div');
     ant.className = 'ant';
+    ant.textContent = '🐜';
     ant.style.animationDuration = randFloat(2, 5) + 's';
     ant.style.animationDelay    = randFloat(0, 4) + 's';
     trail.appendChild(ant);
