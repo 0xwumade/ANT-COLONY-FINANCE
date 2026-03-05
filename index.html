@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🐜 Ant Colony Finance — Colony Monitor</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap');
+
+  :root {
+    --bg:         #0a0a06;
+    --surface:    #111108;
+    --border:     #2a2a18;
+    --amber:      #f5a623;
+    --amber-dim:  #7a5210;
+    --green:      #4ade80;
+    --red:        #f87171;
+    --yellow:     #facc15;
+    --text:       #e8e4d0;
+    --muted:      #6b6650;
+    --ant-trail:  rgba(245,166,35,0.08);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Animated ant trail background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 80% 50% at 20% 80%, rgba(245,166,35,0.04) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 40% at 80% 20%, rgba(245,166,35,0.03) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .app { position: relative; z-index: 1; padding: 24px; max-width: 1400px; margin: 0 auto; }
+
+  /* Header */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 32px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .logo {
+    font-family: 'Syne', sans-serif;
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    color: var(--amber);
+  }
+
+  .logo span { color: var(--text); font-size: 14px; font-weight: 400; margin-left: 8px; opacity: 0.5; }
+
+  .status-bar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .pulse {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--green);
+  }
+
+  .pulse-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: 0.4; transform: scale(0.7); }
+  }
+
+  /* Grid layout */
+  .grid-top    { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+  .grid-mid    { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .grid-bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+  /* Cards */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--amber-dim), transparent);
+    opacity: 0.5;
+  }
+
+  .card-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  .card-value {
+    font-family: 'Syne', sans-serif;
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--amber);
+    line-height: 1;
+  }
+
+  .card-value.green { color: var(--green); }
+  .card-value.red   { color: var(--red); }
+
+  .card-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  /* Signal table */
+  .signal-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .signal-table th {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--muted);
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .signal-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(42,42,24,0.5);
+    font-size: 12px;
+  }
+
+  .signal-table tr:hover td { background: var(--ant-trail); }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .badge-buy    { background: rgba(74,222,128,0.15); color: var(--green); border: 1px solid rgba(74,222,128,0.3); }
+  .badge-sell   { background: rgba(248,113,113,0.15); color: var(--red);  border: 1px solid rgba(248,113,113,0.3); }
+  .badge-hold   { background: rgba(250,204,21,0.10); color: var(--yellow); border: 1px solid rgba(250,204,21,0.2); }
+  .badge-exec   { background: rgba(245,166,35,0.2);  color: var(--amber); border: 1px solid var(--amber-dim); }
+
+  /* Caste breakdown bars */
+  .caste-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .caste-name {
+    width: 80px;
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    flex-shrink: 0;
+  }
+
+  .caste-bar-bg {
+    flex: 1;
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .caste-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.8s ease;
+  }
+
+  .fill-buy  { background: var(--green); }
+  .fill-sell { background: var(--red); }
+  .fill-hold { background: var(--amber-dim); }
+
+  .caste-pct {
+    width: 40px;
+    text-align: right;
+    font-size: 11px;
+    color: var(--amber);
+  }
+
+  /* Colony decision panel */
+  .decision-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+  }
+
+  .decision-action {
+    font-family: 'Syne', sans-serif;
+    font-size: 48px;
+    font-weight: 800;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+
+  .decision-action.BUY  { color: var(--green); }
+  .decision-action.SELL { color: var(--red); }
+  .decision-action.HOLD { color: var(--yellow); }
+
+  /* Confidence arc */
+  .confidence-arc {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 16px 0;
+  }
+
+  .arc-svg { transform: rotate(-90deg); }
+  .arc-bg   { fill: none; stroke: var(--border); stroke-width: 8; }
+  .arc-fill { fill: none; stroke-width: 8; stroke-linecap: round; transition: stroke-dashoffset 1s ease; }
+
+  .arc-label {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    font-family: 'Syne', sans-serif;
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--amber);
+  }
+
+  /* Log feed */
+  .log-feed {
+    height: 200px;
+    overflow-y: auto;
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.8;
+  }
+
+  .log-feed::-webkit-scrollbar { width: 4px; }
+  .log-feed::-webkit-scrollbar-track { background: var(--border); }
+  .log-feed::-webkit-scrollbar-thumb { background: var(--amber-dim); }
+
+  .log-entry { display: flex; gap: 8px; }
+  .log-time  { color: var(--amber-dim); flex-shrink: 0; }
+  .log-buy   { color: var(--green); }
+  .log-sell  { color: var(--red); }
+  .log-hold  { color: var(--yellow); }
+  .log-info  { color: var(--muted); }
+
+  /* Ants animation */
+  .ant-trail-visual {
+    position: relative;
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: visible;
+    margin: 16px 0 8px;
+  }
+
+  .ant {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    background: var(--amber);
+    border-radius: 50%;
+    top: -1px;
+    animation: march linear infinite;
+  }
+
+  @keyframes march {
+    from { left: -10px; opacity: 0; }
+    10%  { opacity: 1; }
+    90%  { opacity: 1; }
+    to   { left: calc(100% + 10px); opacity: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Header -->
+  <div class="header">
+    <div>
+      <div class="logo">🐜 ANT COLONY FINANCE <span>/ COLONY MONITOR</span></div>
+      <div style="font-size:11px; color: var(--muted); margin-top:4px;">
+        Swarm Intelligence Trading on Base Network
+      </div>
+    </div>
+    <div class="status-bar">
+      <div class="pulse">
+        <div class="pulse-dot"></div>
+        COLONY ACTIVE
+      </div>
+      <div id="clock">--:--:--</div>
+      <div>BASE MAINNET</div>
+    </div>
+  </div>
+
+  <!-- Top stats row -->
+  <div class="grid-top">
+    <div class="card">
+      <div class="card-label">Active Agents</div>
+      <div class="card-value" id="stat-agents">0</div>
+      <div class="card-sub">across 5 castes</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Cycle</div>
+      <div class="card-value" id="stat-cycle">0</div>
+      <div class="card-sub">completed cycles</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Trades Executed</div>
+      <div class="card-value green" id="stat-trades">0</div>
+      <div class="card-sub">this session</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Threshold</div>
+      <div class="card-value" id="stat-threshold">65%</div>
+      <div class="card-sub">quorum required</div>
+    </div>
+  </div>
+
+  <!-- Mid section -->
+  <div class="grid-mid">
+
+    <!-- Signal feed table -->
+    <div class="card">
+      <div class="card-label">Signal Feed — Recent Agent Votes</div>
+      <div class="ant-trail-visual" id="ant-trail">
+        <!-- ants injected by JS -->
+      </div>
+      <table class="signal-table">
+        <thead>
+          <tr>
+            <th>Token</th>
+            <th>Caste</th>
+            <th>Signal</th>
+            <th>Confidence</th>
+            <th>Time</th>
+          </tr>
+        </thead>
+        <tbody id="signal-tbody">
+          <!-- populated by JS -->
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Colony Decision Panel -->
+    <div class="decision-panel">
+      <div class="card-label">Colony Decision</div>
+      <div class="decision-action" id="decision-action">HOLD</div>
+      <div style="font-size:11px; color:var(--muted); margin-bottom:12px;" id="decision-token">Waiting for consensus...</div>
+
+      <!-- Confidence arc -->
+      <div class="confidence-arc">
+        <svg width="120" height="120" class="arc-svg">
+          <circle class="arc-bg" cx="60" cy="60" r="50"/>
+          <circle class="arc-fill" id="arc-fill" cx="60" cy="60" r="50"
+            stroke="var(--amber)"
+            stroke-dasharray="314"
+            stroke-dashoffset="314"/>
+        </svg>
+        <div class="arc-label" id="arc-label">0%</div>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; margin-bottom:16px; font-size:11px;">
+        <div>
+          <div style="color:var(--green);">▲ BUY</div>
+          <div id="score-buy" style="font-size:16px; font-family:'Syne',sans-serif; font-weight:800;">0%</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="color:var(--yellow);">● HOLD</div>
+          <div id="score-hold" style="font-size:16px; font-family:'Syne',sans-serif; font-weight:800;">0%</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="color:var(--red);">▼ SELL</div>
+          <div id="score-sell" style="font-size:16px; font-family:'Syne',sans-serif; font-weight:800;">0%</div>
+        </div>
+      </div>
+
+      <div id="exec-badge" style="display:none;">
+        <span class="badge badge-exec">⚡ EXECUTING TRADE</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Bottom section -->
+  <div class="grid-bottom">
+
+    <!-- Caste Breakdown -->
+    <div class="card">
+      <div class="card-label">Caste Pheromone Breakdown</div>
+      <div style="margin-top:14px;" id="caste-bars">
+        <!-- populated by JS -->
+      </div>
+    </div>
+
+    <!-- Log Feed -->
+    <div class="card">
+      <div class="card-label">Colony Log</div>
+      <div class="log-feed" id="log-feed">
+        <div class="log-entry"><span class="log-time">00:00:00</span><span class="log-info">Colony initialized. Waiting for swarm data...</span></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── Simulation data (replace with real Redis/WebSocket feed in prod) ──
+
+const CASTES = [
+  { name: "WHALE",     weight: 0.30 },
+  { name: "LIQUIDITY", weight: 0.25 },
+  { name: "TECHNICAL", weight: 0.20 },
+  { name: "ARBITRAGE", weight: 0.15 },
+  { name: "SENTIMENT", weight: 0.10 },
+];
+
+const TOKENS = ["BRETT", "DEGEN"];
+
+let cycle       = 0;
+let tradeCount  = 0;
+let signalQueue = [];
+const MAX_SIGNALS = 20;
+
+function randFloat(min, max) { return Math.random() * (max - min) + min; }
+function randInt(min, max)   { return Math.floor(randFloat(min, max)); }
+function pick(arr)           { return arr[randInt(0, arr.length)]; }
+
+// ── Ant trail ─────────────────────────────────────────────────────────
+function spawnAnts() {
+  const trail = document.getElementById('ant-trail');
+  trail.innerHTML = '';
+  for (let i = 0; i < 8; i++) {
+    const ant = document.createElement('div');
+    ant.className = 'ant';
+    ant.style.animationDuration = randFloat(2, 5) + 's';
+    ant.style.animationDelay    = randFloat(0, 4) + 's';
+    trail.appendChild(ant);
+  }
+}
+
+// ── Clock ─────────────────────────────────────────────────────────────
+function updateClock() {
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString();
+}
+
+// ── Generate fake signal ──────────────────────────────────────────────
+function generateSignal() {
+  const signals   = ['BUY','SELL','HOLD'];
+  const weights   = [0.45, 0.35, 0.20];
+  const r         = Math.random();
+  let   signal    = 'HOLD';
+  let   cum       = 0;
+  for (let i = 0; i < signals.length; i++) {
+    cum += weights[i];
+    if (r < cum) { signal = signals[i]; break; }
+  }
+
+  return {
+    token:      pick(TOKENS),
+    caste:      pick(CASTES).name,
+    signal,
+    confidence: randFloat(0.3, 0.98),
+    time:       new Date().toLocaleTimeString(),
+  };
+}
+
+// ── Update signal table ───────────────────────────────────────────────
+function pushSignal(sig) {
+  signalQueue.unshift(sig);
+  if (signalQueue.length > MAX_SIGNALS) signalQueue.pop();
+
+  const tbody = document.getElementById('signal-tbody');
+  tbody.innerHTML = signalQueue.map(s => `
+    <tr>
+      <td style="color:var(--amber); font-weight:700">${s.token}</td>
+      <td style="color:var(--muted)">${s.caste}</td>
+      <td><span class="badge badge-${s.signal.toLowerCase()}">${s.signal}</span></td>
+      <td>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <div style="width:50px; height:3px; background:var(--border); border-radius:2px; overflow:hidden;">
+            <div style="width:${(s.confidence*100).toFixed(0)}%; height:100%; background:${
+              s.signal==='BUY' ? 'var(--green)' : s.signal==='SELL' ? 'var(--red)' : 'var(--yellow)'
+            }; border-radius:2px;"></div>
+          </div>
+          <span style="color:var(--muted)">${(s.confidence*100).toFixed(0)}%</span>
+        </div>
+      </td>
+      <td style="color:var(--muted)">${s.time}</td>
+    </tr>
+  `).join('');
+}
+
+// ── Update colony decision ────────────────────────────────────────────
+function updateDecision(action, confidence, buyScore, sellScore, holdScore, token, execute) {
+  document.getElementById('decision-action').textContent = action;
+  document.getElementById('decision-action').className   = `decision-action ${action}`;
+  document.getElementById('decision-token').textContent  = `Token: ${token}`;
+
+  // Arc
+  const circumference = 314;
+  const offset = circumference - (confidence * circumference);
+  const arcFill = document.getElementById('arc-fill');
+  arcFill.style.strokeDashoffset = offset;
+  arcFill.style.stroke = action === 'BUY' ? 'var(--green)' : action === 'SELL' ? 'var(--red)' : 'var(--yellow)';
+  document.getElementById('arc-label').textContent = (confidence * 100).toFixed(0) + '%';
+
+  document.getElementById('score-buy').textContent  = (buyScore  * 100).toFixed(1) + '%';
+  document.getElementById('score-sell').textContent = (sellScore * 100).toFixed(1) + '%';
+  document.getElementById('score-hold').textContent = (holdScore * 100).toFixed(1) + '%';
+
+  const execBadge = document.getElementById('exec-badge');
+  execBadge.style.display = execute ? 'block' : 'none';
+
+  if (execute) tradeCount++;
+  document.getElementById('stat-trades').textContent = tradeCount;
+}
+
+// ── Update caste bars ─────────────────────────────────────────────────
+function updateCasteBars(casteData) {
+  const container = document.getElementById('caste-bars');
+  container.innerHTML = CASTES.map(c => {
+    const d   = casteData[c.name] || { buy: 0, sell: 0 };
+    const pct = ((d.buy - d.sell + 1) / 2 * 100).toFixed(0);
+    const cls = d.buy > d.sell ? 'fill-buy' : d.sell > d.buy ? 'fill-sell' : 'fill-hold';
+    return `
+      <div class="caste-row">
+        <div class="caste-name">${c.name}</div>
+        <div class="caste-bar-bg">
+          <div class="caste-bar-fill ${cls}" style="width:${pct}%"></div>
+        </div>
+        <div class="caste-pct">${pct}%</div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ── Log ───────────────────────────────────────────────────────────────
+function log(msg, type = 'info') {
+  const feed = document.getElementById('log-feed');
+  const time = new Date().toLocaleTimeString();
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML = `<span class="log-time">${time}</span><span class="log-${type}">${msg}</span>`;
+  feed.insertBefore(entry, feed.firstChild);
+  if (feed.children.length > 50) feed.lastChild.remove();
+}
+
+// ── Simulation cycle ──────────────────────────────────────────────────
+function simulateCycle() {
+  cycle++;
+  document.getElementById('stat-cycle').textContent = cycle;
+  document.getElementById('stat-agents').textContent = CASTES.length * TOKENS.length * randInt(18, 25);
+
+  // Generate batch of signals
+  const batchSize = randInt(8, 20);
+  for (let i = 0; i < batchSize; i++) {
+    pushSignal(generateSignal());
+  }
+
+  // Compute fake consensus
+  const buySignals  = signalQueue.filter(s => s.signal === 'BUY').length;
+  const sellSignals = signalQueue.filter(s => s.signal === 'SELL').length;
+  const total       = signalQueue.length || 1;
+  const buyScore    = buySignals  / total;
+  const sellScore   = sellSignals / total;
+  const holdScore   = 1 - buyScore - sellScore;
+
+  let action     = 'HOLD';
+  let confidence = Math.max(buyScore, sellScore, holdScore);
+  if (buyScore >= 0.65)       action = 'BUY';
+  else if (sellScore >= 0.65) action = 'SELL';
+
+  const token   = pick(TOKENS);
+  const execute = action !== 'HOLD';
+
+  updateDecision(action, confidence, buyScore, sellScore, holdScore, token, execute);
+
+  // Caste breakdown
+  const casteData = {};
+  CASTES.forEach(c => {
+    casteData[c.name] = {
+      buy:  randFloat(0.1, 0.9),
+      sell: randFloat(0.1, 0.9),
+    };
+  });
+  updateCasteBars(casteData);
+
+  // Log
+  if (execute) {
+    log(`⚡ COLONY ${action} → ${token} (confidence: ${(confidence*100).toFixed(1)}%)`, action.toLowerCase());
+  } else {
+    log(`Cycle #${cycle} complete. ${batchSize} signals ingested. Consensus: HOLD`, 'hold');
+  }
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────
+spawnAnts();
+updateClock();
+setInterval(updateClock, 1000);
+
+log('🐜 Colony online. Agents spawning...', 'info');
+setTimeout(() => log('Connected to Base mainnet RPC', 'info'), 800);
+setTimeout(() => log('Redis pheromone bus connected', 'info'), 1600);
+setTimeout(() => log('Swarm initialized — 5 castes active', 'info'), 2400);
+
+// Start simulation cycles
+setTimeout(() => simulateCycle(), 3000);
+setInterval(simulateCycle, 8000);
+</script>
+</body>
+</html>
