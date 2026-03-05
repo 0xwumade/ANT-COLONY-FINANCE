@@ -24,11 +24,23 @@ A decentralized trading system where thousands of specialized AI agents collecti
                        │  ColonyDecision (execute=True)
                        ▼
 ┌─────────────────────────────────────────────────────┐
-│             EXECUTION LAYER (Base)                   │
-│  ColonyTrader → Uniswap V3 / Aerodrome swap          │
+│          EXECUTION LAYER (CDP Swap API)              │
+│  ColonyTrader → CDP Swap API (130+ DEXes via 0x)    │
+│  Auto-approval, best pricing, sub-500ms latency      │
 │  AntColonyFinance.sol → onchain audit log            │
 └─────────────────────────────────────────────────────┘
 ```
+
+### Why CDP Swap API?
+
+Instead of direct Uniswap V3 calls, we use the Coinbase Developer Platform Swap API:
+
+- ✅ Automatic token approvals (no separate approval tx)
+- ✅ Best pricing across 130+ exchanges via 0x aggregation
+- ✅ Built-in slippage protection
+- ✅ Sub-500ms latency, no infrastructure to manage
+- ✅ Single API call: quote → sign → broadcast
+- ✅ Qualifies for CDP Builder Grant
 
 ### Caste Weights
 
@@ -100,17 +112,25 @@ python serve_dashboard.py
 This project qualifies for the [Coinbase Developer Platform Builder Grants](https://www.coinbase.com/en-gb/blog/cdp-builder-grants-30k-in-funding-for-developers-building-on-base) ($30k):
 
 - ✅ Built on Base network
+- ✅ Uses CDP Swap API for trade execution (130+ DEXes via 0x)
 - ✅ Uses CDP Wallet API for treasury management
 - ✅ Onchain contract (AntColonyFinance.sol) logs all decisions
 - ✅ Consumer-facing dashboard with Coinbase Onramp integration
 - ✅ One-click treasury funding via "Fund Treasury" button
 
-### Coinbase Onramp Integration
+### CDP Integration Features
 
-The dashboard includes a "Fund Treasury" button that opens Coinbase Onramp, allowing users to:
-- Purchase ETH or USDC with fiat (credit card, bank transfer)
-- Funds sent directly to the colony treasury wallet on Base
-- No manual wallet setup required for new users
+1. CDP Swap API
+   - Automatic token approvals (no separate approval transactions)
+   - Best pricing across 130+ exchanges via 0x aggregation
+   - Built-in slippage protection
+   - Sub-500ms latency
+
+2. Coinbase Onramp Integration
+   - "Fund Treasury" button in dashboard
+   - Purchase ETH or USDC with fiat (credit card, bank transfer)
+   - Funds sent directly to colony treasury on Base
+   - No manual wallet setup required
 
 ---
 

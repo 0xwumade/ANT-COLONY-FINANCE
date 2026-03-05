@@ -5,6 +5,7 @@ asyncio==3.4.3
 redis==5.0.3
 python-dotenv==1.0.1
 coinbase-advanced-py==1.4.1
+cdp-sdk>=0.0.1
 pandas==2.2.1
 numpy==1.26.4
 requests==2.31.0

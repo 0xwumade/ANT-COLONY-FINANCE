@@ -1,96 +1,86 @@
 """
-execution/trader.py — Trade execution on Base via Uniswap V3 / Aerodrome
+execution/trader.py — Trade execution via Coinbase CDP Swap API
 
-Listens for ColonyDecisions from the consensus engine.
-When execute=True, routes the trade through the best available DEX.
+Replaces direct Uniswap V3 calls with the CDP Swap API.
 
-Safety features:
-- Max trade size cap
-- Slippage protection
-- Onchain logging to the Colony smart contract
+Why CDP Swap API vs raw web3.py:
+  ✅ Handles token approvals automatically
+  ✅ Sources best pricing across 130+ exchanges via 0x
+  ✅ Built-in slippage protection
+  ✅ Qualifies project for CDP Builder Grant
+  ✅ Sub-500ms latency, no infrastructure to manage
+  ✅ Single call: quote → sign → broadcast
+
+Docs: https://docs.cdp.coinbase.com/trade-api/quickstart
 """
-import asyncio
-import json
 import time
 from typing import Optional
-
-from web3 import AsyncWeb3
-from web3.middleware import async_geth_poa_middleware
-from eth_account import Account
 from loguru import logger
 
+from cdp import CdpClient
 from config.settings import settings
 from consensus.colony_brain import ColonyDecision
 
 
-# Uniswap V3 SwapRouter02 ABI (minimal — only exactInputSingle)
-UNISWAP_ROUTER_ABI = json.loads("""[
-  {
-    "inputs": [{
-      "components": [
-        {"name": "tokenIn",           "type": "address"},
-        {"name": "tokenOut",          "type": "address"},
-        {"name": "fee",               "type": "uint24"},
-        {"name": "recipient",         "type": "address"},
-        {"name": "amountIn",          "type": "uint256"},
-        {"name": "amountOutMinimum",  "type": "uint256"},
-        {"name": "sqrtPriceLimitX96", "type": "uint160"}
-      ],
-      "name": "params",
-      "type": "tuple"
-    }],
-    "name": "exactInputSingle",
-    "outputs": [{"name": "amountOut", "type": "uint256"}],
-    "stateMutability": "payable",
-    "type": "function"
-  }
-]""")
+# Base token addresses
+WETH_ADDRESS = "0x4200000000000000000000000000000000000006"
+USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
 
-# WETH on Base
-WETH_ADDRESS   = "0x4200000000000000000000000000000000000006"
-# USDC on Base
-USDC_ADDRESS   = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
-# Default pool fee tier (0.3%)
-DEFAULT_FEE    = 3000
-# Max slippage (2%)
-MAX_SLIPPAGE   = 0.02
+# CDP Swap slippage: 100 bps = 1%
+SLIPPAGE_BPS = 100
 
 
 class ColonyTrader:
     """
-    Executes trades on Base DEXes based on ColonyDecisions.
+    Executes swaps on Base via the Coinbase CDP Swap API.
 
     Decision flow:
-        BUY  → swap USDC → token
-        SELL → swap token → USDC
-        HOLD → no action
+        BUY  -> swap USDC -> token   (colony is accumulating)
+        SELL -> swap token -> USDC   (colony is exiting)
+        HOLD -> no action
+
+    CDP Swap API handles:
+        - Token approval transactions
+        - Route optimisation across DEXes
+        - Transaction signing & broadcasting
+        - Gas estimation and optimisation
     """
 
     def __init__(self):
-        self.w3: Optional[AsyncWeb3] = None
-        self.account: Optional[Account] = None
-        self.router_contract = None
+        self._cdp     = None
+        self._account = None
+        self.simulate: bool = not bool(settings.CDP_API_KEY_NAME)
         self.trade_history: list[dict] = []
 
     async def connect(self):
-        """Initialize Web3 connection to Base."""
-        self.w3 = AsyncWeb3(
-            AsyncWeb3.AsyncHTTPProvider(settings.BASE_RPC_URL)
-        )
-        self.w3.middleware_onion.inject(async_geth_poa_middleware, layer=0)
+        """
+        Initialise the CDP client and load (or create) the treasury account.
+        The treasury account is a CDP EVM account managed inside a TEE.
+        """
+        if self.simulate:
+            logger.warning(
+                "[TRADER] No CDP API key configured — running in simulation mode. "
+                "Set CDP_API_KEY_NAME and CDP_API_KEY_PRIVATE_KEY in .env to go live."
+            )
+            return
 
-        if settings.TREASURY_PRIVATE_KEY:
-            self.account = Account.from_key(settings.TREASURY_PRIVATE_KEY)
-            logger.info(f"[TRADER] Treasury wallet: {self.account.address}")
-        else:
-            logger.warning("[TRADER] No treasury key configured — simulation mode")
+        try:
+            self._cdp = CdpClient(
+                api_key_id     = settings.CDP_API_KEY_NAME,
+                api_key_secret = settings.CDP_API_KEY_PRIVATE_KEY,
+            )
 
-        # Initialize Uniswap V3 router
-        self.router_contract = self.w3.eth.contract(
-            address=AsyncWeb3.to_checksum_address(settings.UNISWAP_V3_ROUTER),
-            abi=UNISWAP_ROUTER_ABI,
-        )
-        logger.info("[TRADER] Connected to Base mainnet")
+            # get_or_create_account is idempotent — safe to call every startup
+            self._account = await self._cdp.evm.get_or_create_account(
+                name="AntColonyTreasury"
+            )
+            logger.success(
+                f"[TRADER] CDP treasury account ready: {self._account.address}"
+            )
+
+        except Exception as e:
+            logger.error(f"[TRADER] CDP connect failed: {e}. Falling back to simulation.")
+            self.simulate = True
 
     async def execute_decision(self, decision: ColonyDecision) -> dict:
         """
@@ -98,99 +88,129 @@ class ColonyTrader:
         Returns a trade receipt dict.
         """
         if not decision.execute:
-            logger.debug(f"[TRADER] {decision.token} → HOLD, skipping")
+            logger.debug(f"[TRADER] {decision.token} -> HOLD, skipping")
             return {"status": "skipped", "reason": "HOLD"}
 
-        if not self.account:
-            # Simulation mode — log but don't transact
-            logger.info(
-                f"[TRADER:SIM] Would {decision.action} {decision.token} "
-                f"(confidence={decision.confidence:.1%})"
-            )
-            return {
-                "status": "simulated",
-                "action": decision.action,
-                "token":  decision.token,
-                "confidence": decision.confidence,
-                "timestamp": time.time(),
-            }
+        if self.simulate:
+            return self._simulate(decision)
 
         try:
-            amount_eth = self._size_trade(decision.confidence)
-            amount_wei = int(amount_eth * 1e18)
-
             if decision.action == "BUY":
-                receipt = await self._swap(
-                    token_in  = WETH_ADDRESS,
-                    token_out = decision.token,
-                    amount_in = amount_wei,
-                )
+                from_token  = USDC_ADDRESS
+                to_token    = decision.token
+                amount_usdc = self._size_trade_usdc(decision.confidence)
+                # USDC has 6 decimals
+                from_amount = str(int(amount_usdc * 1_000_000))
+
             elif decision.action == "SELL":
-                receipt = await self._swap(
-                    token_in  = decision.token,
-                    token_out = WETH_ADDRESS,
-                    amount_in = amount_wei,
-                )
+                from_token  = decision.token
+                to_token    = USDC_ADDRESS
+                # Token decimals vary — use ETH-equivalent sizing
+                from_amount = str(int(self._size_trade_eth(decision.confidence) * 1e18))
             else:
                 return {"status": "skipped", "reason": "HOLD"}
 
-            trade_log = {
-                "status":     "executed",
-                "action":     decision.action,
-                "token":      decision.token,
-                "amount_eth": amount_eth,
-                "tx_hash":    receipt["transactionHash"].hex(),
-                "confidence": decision.confidence,
-                "signal_count": decision.signal_count,
-                "timestamp":  time.time(),
-            }
-            self.trade_history.append(trade_log)
-            logger.success(
-                f"[TRADER] ✅ {decision.action} {decision.token} "
-                f"tx={trade_log['tx_hash'][:10]}..."
+            trade_log = await self._cdp_swap(
+                from_token  = from_token,
+                to_token    = to_token,
+                from_amount = from_amount,
+                decision    = decision,
             )
+            self.trade_history.append(trade_log)
             return trade_log
 
         except Exception as e:
             logger.error(f"[TRADER] Trade failed for {decision.token}: {e}")
             return {"status": "error", "error": str(e), "token": decision.token}
 
-    async def _swap(self, token_in: str, token_out: str, amount_in: int) -> dict:
-        """Execute exactInputSingle swap on Uniswap V3."""
-        min_out = int(amount_in * (1 - MAX_SLIPPAGE))
+    async def _cdp_swap(
+        self,
+        from_token:  str,
+        to_token:    str,
+        from_amount: str,
+        decision:    ColonyDecision,
+    ) -> dict:
+        """
+        Execute a swap via CDP Swap API.
 
-        params = {
-            "tokenIn":           AsyncWeb3.to_checksum_address(token_in),
-            "tokenOut":          AsyncWeb3.to_checksum_address(token_out),
-            "fee":               DEFAULT_FEE,
-            "recipient":         self.account.address,
-            "amountIn":          amount_in,
-            "amountOutMinimum":  min_out,
-            "sqrtPriceLimitX96": 0,
+        Step 1: quote_swap() — gets best route, checks liquidity
+        Step 2: swap_quote.execute() — signs + broadcasts onchain
+        """
+        # Step 1: Get swap quote
+        swap_quote = await self._account.quote_swap(
+            from_token   = from_token,
+            to_token     = to_token,
+            from_amount  = from_amount,
+            network      = "base",
+            slippage_bps = SLIPPAGE_BPS,
+        )
+
+        if not swap_quote.liquidity_available:
+            logger.warning(
+                f"[TRADER] Insufficient liquidity for {decision.action} "
+                f"{decision.token} — skipping"
+            )
+            return {
+                "status": "skipped",
+                "reason": "insufficient_liquidity",
+                "token":  decision.token,
+            }
+
+        logger.info(
+            f"[TRADER] Quote: {decision.action} {decision.token} "
+            f"in={from_amount} out~{swap_quote.to_amount} "
+            f"(slippage={SLIPPAGE_BPS / 100:.1f}%)"
+        )
+
+        # Step 2: Execute the swap — CDP handles approvals + signing + broadcast
+        result = await swap_quote.execute()
+
+        trade_log = {
+            "status":       "executed",
+            "action":       decision.action,
+            "token":        decision.token,
+            "from_amount":  from_amount,
+            "to_amount":    swap_quote.to_amount,
+            "tx_hash":      result.transaction_hash,
+            "confidence":   decision.confidence,
+            "signal_count": decision.signal_count,
+            "timestamp":    time.time(),
+            "via":          "cdp_swap_api",
         }
 
-        nonce    = await self.w3.eth.get_transaction_count(self.account.address)
-        gas_price = await self.w3.eth.gas_price
+        logger.success(
+            f"[TRADER] EXECUTED {decision.action} {decision.token} "
+            f"tx={result.transaction_hash[:12]}..."
+        )
+        return trade_log
 
-        tx = await self.router_contract.functions.exactInputSingle(params).build_transaction({
-            "from":     self.account.address,
-            "value":    amount_in if token_in == WETH_ADDRESS else 0,
-            "nonce":    nonce,
-            "gasPrice": gas_price,
-            "chainId":  settings.BASE_CHAIN_ID,
-        })
+    def _simulate(self, decision: ColonyDecision) -> dict:
+        """Log a simulated trade without hitting any API."""
+        amount = self._size_trade_usdc(decision.confidence)
+        logger.info(
+            f"[TRADER:SIM] Would {decision.action} {decision.token} "
+            f"~${amount:.2f} USDC (confidence={decision.confidence:.1%})"
+        )
+        return {
+            "status":     "simulated",
+            "action":     decision.action,
+            "token":      decision.token,
+            "amount_usd": amount,
+            "confidence": decision.confidence,
+            "timestamp":  time.time(),
+        }
 
-        signed  = self.account.sign_transaction(tx)
-        tx_hash = await self.w3.eth.send_raw_transaction(signed.rawTransaction)
-        receipt = await self.w3.eth.wait_for_transaction_receipt(tx_hash)
-        return receipt
+    def _size_trade_usdc(self, confidence: float) -> float:
+        """Kelly-inspired sizing in USDC. Scales with confidence."""
+        min_usd = settings.MIN_TRADE_SIZE_ETH * 3000
+        max_usd = settings.MAX_TRADE_SIZE_ETH * 3000
+        raw     = min_usd + confidence * (max_usd - min_usd)
+        return round(min(max(raw, min_usd), max_usd), 2)
 
-    def _size_trade(self, confidence: float) -> float:
-        """
-        Kelly-inspired position sizing.
-        Higher confidence → larger trade (within min/max bounds).
-        """
-        raw  = settings.MIN_TRADE_SIZE_ETH + (
+    def _size_trade_eth(self, confidence: float) -> float:
+        """ETH-denominated size for SELL orders."""
+        raw = settings.MIN_TRADE_SIZE_ETH + (
             confidence * (settings.MAX_TRADE_SIZE_ETH - settings.MIN_TRADE_SIZE_ETH)
         )
         return round(min(max(raw, settings.MIN_TRADE_SIZE_ETH), settings.MAX_TRADE_SIZE_ETH), 6)
+
