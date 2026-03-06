@@ -29,17 +29,9 @@ _colony_ok: bool = False
 # ─────────────────────────────────────────────────────────────────────
 
 async def handle_root(request):
-    html_path = Path("index.html")
-    if html_path.exists():
-        html_content = html_path.read_text()
-        # Inject network name dynamically
-        try:
-            from settings import settings
-            network_name = settings.NETWORK_NAME
-            html_content = html_content.replace("BASE MAINNET", network_name)
-        except Exception:
-            pass
-        return web.Response(text=html_content, content_type="text/html")
+    html = Path("dashboard/index.html")
+    if html.exists():
+        return web.Response(text=html.read_text(), content_type="text/html")
     return web.Response(text="<h1>🐜 Colony booting...</h1>", content_type="text/html")
 
 
@@ -51,52 +43,31 @@ async def handle_health(request):
 
 
 async def handle_ws(request):
-    ws = web.WebSocketResponse(heartbeat=25, timeout=60)
+    ws = web.WebSocketResponse(heartbeat=25)
     await ws.prepare(request)
     _clients.add(ws)
     logger.info(f"[WS] +client  total={len(_clients)}")
     try:
-        # Send initial snapshot immediately
         await ws.send_str(json.dumps(_snapshot))
-        # Keep connection alive
-        async for msg in ws:
-            pass  # We only push data, never receive
-    except asyncio.CancelledError:
-        logger.debug("[WS] Connection cancelled")
-    except Exception as e:
-        logger.debug(f"[WS] Connection error: {e}")
+        async for _ in ws:
+            pass
+    except Exception:
+        pass
     finally:
         _clients.discard(ws)
-        logger.info(f"[WS] -client  total={len(_clients)}")
     return ws
 
 
 async def broadcast(data: dict):
-    """Push data to all connected WebSocket clients."""
     global _snapshot
     _snapshot = data
-    
-    if not _clients:
-        return
-    
-    payload = json.dumps(data)
     dead = set()
-    
     for ws in list(_clients):
         try:
-            if not ws.closed:
-                await ws.send_str(payload)
-            else:
-                dead.add(ws)
-        except ConnectionResetError:
+            await ws.send_str(json.dumps(data))
+        except Exception:
             dead.add(ws)
-        except Exception as e:
-            logger.debug(f"[WS] Broadcast error: {e}")
-            dead.add(ws)
-    
-    if dead:
-        _clients.difference_update(dead)
-        logger.debug(f"[WS] Removed {len(dead)} dead connections")
+    _clients.difference_update(dead)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -130,24 +101,18 @@ async def run_colony():
         return
 
     TOKENS = [
-        {"symbol":"BRETT",  "address":"0x532f27101965dd16442E59d40670FaF5eBB142E4","coingecko_id":"based-brett"},
-        {"symbol":"AERO",   "address":"0x940181a94A35A4569E4529A3CDfB74e38FD98631","coingecko_id":"aerodrome-finance"},
-        {"symbol":"VIRTUAL","address":"0x0b3e328455c4059EEb9e3f84b5543F74E24e7E1b","coingecko_id":"virtual-protocol"},
-        {"symbol":"WETH",   "address":"0x4200000000000000000000000000000000000006","coingecko_id":"weth"},
-        {"symbol":"cbBTC",  "address":"0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf","coingecko_id":"coinbase-wrapped-btc"},
+        {"symbol":"BRETT",  "address":"0x532f27101965dd16442E59d40670FaF5eBB142E4","coingecko_id":"based-brett","twitter":["$BRETT","Brett Base"]},
+        {"symbol":"AERO",   "address":"0x940181a94A35A4569E4529A3CDfB74e38FD98631","coingecko_id":"aerodrome-finance","twitter":["$AERO","Aerodrome"]},
+        {"symbol":"VIRTUAL","address":"0x0b3e328455c4059EEb9e3f84b5543F74E24e7E1b","coingecko_id":"virtual-protocol","twitter":["$VIRTUAL","Virtuals"]},
+        {"symbol":"WETH",   "address":"0x4200000000000000000000000000000000000006","coingecko_id":"weth","twitter":["$WETH","Wrapped Ether"]},
+        {"symbol":"cbBTC",  "address":"0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf","coingecko_id":"coinbase-wrapped-btc","twitter":["$cbBTC","Coinbase BTC"]},
     ]
 
-    logger.info("[COLONY] Connecting to infrastructure (Redis, Web3)...")
     try:
         brain  = ColonyBrain()
         trader = ColonyTrader()
-        await asyncio.wait_for(brain.connect(), timeout=30)
-        await asyncio.wait_for(trader.connect(), timeout=30)
-        logger.success("[COLONY] Infrastructure connected")
-    except asyncio.TimeoutError:
-        logger.error("[COLONY] Infrastructure connection timeout")
-        await broadcast({"type": "error", "message": "Infrastructure timeout"})
-        return
+        await brain.connect()
+        await trader.connect()
     except Exception as e:
         logger.error(f"[COLONY] Infrastructure connect failed: {e}")
         await broadcast({"type": "error", "message": f"Connect error: {e}"})
@@ -160,13 +125,16 @@ async def run_colony():
     logger.success("[COLONY] 🐜 Colony fully online — starting cycles")
 
     def agents_for(token):
-        a, cg = token["address"], token.get("coingecko_id","")
+        sym  = token["symbol"]
+        addr = token["address"]
+        cg   = token.get("coingecko_id", "")
+        tw   = token.get("twitter", [])
         return [
-            WhaleAgent(token_address=a, colony_brain=brain),
-            TechnicalAgent(token_address=a, coingecko_id=cg, colony_brain=brain),
-            LiquidityAgent(token_address=a, colony_brain=brain),
-            SentimentAgent(token_address=a, search_terms=[], colony_brain=brain),
-            ArbitrageAgent(token_address=a, coingecko_id=cg, colony_brain=brain),
+            WhaleAgent(token=sym,     token_address=addr),
+            TechnicalAgent(token=sym, coingecko_id=cg),
+            LiquidityAgent(token=sym, token_address=addr),
+            SentimentAgent(token=sym, search_terms=tw),
+            ArbitrageAgent(token=sym, token_address=addr),
         ]
 
     cycle = 0
@@ -262,9 +230,6 @@ async def run_colony():
 # ─────────────────────────────────────────────────────────────────────
 
 async def boot():
-    """Start HTTP/WebSocket server immediately, then boot colony in background."""
-    logger.info("[BOOT] Starting web server...")
-    
     app = web.Application()
     app.router.add_get("/",       handle_root)
     app.router.add_get("/ws",     handle_ws)
@@ -273,13 +238,12 @@ async def boot():
     runner = web.AppRunner(app)
     await runner.setup()
     await web.TCPSite(runner, "0.0.0.0", PORT).start()
-    logger.success(f"[WS] ✅ Server LIVE on 0.0.0.0:{PORT} — Railway health check will pass")
+    logger.success(f"[WS] Server live on 0.0.0.0:{PORT}")
 
     # Colony runs in background — server never blocks
     asyncio.create_task(run_colony())
 
-    # Keep server running forever
-    logger.info("[BOOT] Server ready, colony loading in background...")
+    # Keep running forever
     while True:
         await asyncio.sleep(3600)
 
