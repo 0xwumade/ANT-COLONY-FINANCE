@@ -43,31 +43,52 @@ async def handle_health(request):
 
 
 async def handle_ws(request):
-    ws = web.WebSocketResponse(heartbeat=25)
+    ws = web.WebSocketResponse(heartbeat=25, timeout=60)
     await ws.prepare(request)
     _clients.add(ws)
     logger.info(f"[WS] +client  total={len(_clients)}")
     try:
+        # Send initial snapshot immediately
         await ws.send_str(json.dumps(_snapshot))
-        async for _ in ws:
-            pass
-    except Exception:
-        pass
+        # Keep connection alive
+        async for msg in ws:
+            pass  # We only push data, never receive
+    except asyncio.CancelledError:
+        logger.debug("[WS] Connection cancelled")
+    except Exception as e:
+        logger.debug(f"[WS] Connection error: {e}")
     finally:
         _clients.discard(ws)
+        logger.info(f"[WS] -client  total={len(_clients)}")
     return ws
 
 
 async def broadcast(data: dict):
+    """Push data to all connected WebSocket clients."""
     global _snapshot
     _snapshot = data
+    
+    if not _clients:
+        return
+    
+    payload = json.dumps(data)
     dead = set()
+    
     for ws in list(_clients):
         try:
-            await ws.send_str(json.dumps(data))
-        except Exception:
+            if not ws.closed:
+                await ws.send_str(payload)
+            else:
+                dead.add(ws)
+        except ConnectionResetError:
             dead.add(ws)
-    _clients.difference_update(dead)
+        except Exception as e:
+            logger.debug(f"[WS] Broadcast error: {e}")
+            dead.add(ws)
+    
+    if dead:
+        _clients.difference_update(dead)
+        logger.debug(f"[WS] Removed {len(dead)} dead connections")
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -78,9 +99,11 @@ async def run_colony():
     global _colony_ok
     logger.info("[COLONY] Background boot starting...")
 
-    # Small delay so web server is fully ready first
-    await asyncio.sleep(2)
+    # Wait for web server to be fully ready and Railway health check to pass
+    await asyncio.sleep(5)
 
+    # Lazy import — only load after server is running
+    logger.info("[COLONY] Loading agent modules...")
     try:
         from settings import settings
         from whale_agent import WhaleAgent
@@ -92,6 +115,7 @@ async def run_colony():
         from colony_brain import ColonyBrain
         from trader import ColonyTrader
         from portfolio import PaperPortfolio
+        logger.success("[COLONY] All modules loaded successfully")
     except Exception as e:
         logger.error(f"[COLONY] Import failed: {e}\n{traceback.format_exc()}")
         await broadcast({"type": "error", "message": f"Import error: {e}"})
@@ -105,11 +129,17 @@ async def run_colony():
         {"symbol":"cbBTC",  "address":"0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf","coingecko_id":"coinbase-wrapped-btc"},
     ]
 
+    logger.info("[COLONY] Connecting to infrastructure (Redis, Web3)...")
     try:
         brain  = ColonyBrain()
         trader = ColonyTrader()
-        await brain.connect()
-        await trader.connect()
+        await asyncio.wait_for(brain.connect(), timeout=30)
+        await asyncio.wait_for(trader.connect(), timeout=30)
+        logger.success("[COLONY] Infrastructure connected")
+    except asyncio.TimeoutError:
+        logger.error("[COLONY] Infrastructure connection timeout")
+        await broadcast({"type": "error", "message": "Infrastructure timeout"})
+        return
     except Exception as e:
         logger.error(f"[COLONY] Infrastructure connect failed: {e}")
         await broadcast({"type": "error", "message": f"Connect error: {e}"})
@@ -224,6 +254,9 @@ async def run_colony():
 # ─────────────────────────────────────────────────────────────────────
 
 async def boot():
+    """Start HTTP/WebSocket server immediately, then boot colony in background."""
+    logger.info("[BOOT] Starting web server...")
+    
     app = web.Application()
     app.router.add_get("/",       handle_root)
     app.router.add_get("/ws",     handle_ws)
@@ -232,12 +265,13 @@ async def boot():
     runner = web.AppRunner(app)
     await runner.setup()
     await web.TCPSite(runner, "0.0.0.0", PORT).start()
-    logger.success(f"[WS] Server live on 0.0.0.0:{PORT}")
+    logger.success(f"[WS] ✅ Server LIVE on 0.0.0.0:{PORT} — Railway health check will pass")
 
     # Colony runs in background — server never blocks
     asyncio.create_task(run_colony())
 
-    # Keep running forever
+    # Keep server running forever
+    logger.info("[BOOT] Server ready, colony loading in background...")
     while True:
         await asyncio.sleep(3600)
 
