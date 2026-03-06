@@ -9,8 +9,8 @@ import asyncio
 import aiohttp
 from loguru import logger
 
-from base_agent import BaseAgent, PheromoneSignal, Signal
-from settings import settings
+from agents.base_agent import BaseAgent, PheromoneSignal, Signal
+from config.settings import settings
 
 
 # Known whale threshold: wallets holding more than this % of supply
@@ -49,7 +49,7 @@ class WhaleAgent(BaseAgent):
                     "contractaddress": self.token_address,
                     "sort":            "desc",
                     "offset":          50,    # last 50 transfers
-                    "apikey":          settings.COINGECKO_API_KEY or "YourApiKeyToken",
+                    "apikey":          settings.BASESCAN_API_KEY or "YourApiKeyToken",
                 }
                 async with session.get(BASE_EXPLORER_API, params=params) as resp:
                     data = await resp.json()

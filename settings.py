@@ -8,24 +8,10 @@ load_dotenv()
 
 class Config:
     # ── Network ───────────────────────────────
-    USE_TESTNET: bool         = os.getenv("USE_TESTNET", "true").lower() == "true"
     BASE_RPC_URL: str         = os.getenv("BASE_RPC_URL", "https://mainnet.base.org")
     BASE_CHAIN_ID: int        = int(os.getenv("BASE_CHAIN_ID", "8453"))
     BASE_TESTNET_RPC_URL: str = os.getenv("BASE_TESTNET_RPC_URL", "https://sepolia.base.org")
     BASE_TESTNET_CHAIN_ID: int= int(os.getenv("BASE_TESTNET_CHAIN_ID", "84532"))
-    
-    # Active network (auto-selected based on USE_TESTNET)
-    @property
-    def ACTIVE_RPC_URL(self) -> str:
-        return self.BASE_TESTNET_RPC_URL if self.USE_TESTNET else self.BASE_RPC_URL
-    
-    @property
-    def ACTIVE_CHAIN_ID(self) -> int:
-        return self.BASE_TESTNET_CHAIN_ID if self.USE_TESTNET else self.BASE_CHAIN_ID
-    
-    @property
-    def NETWORK_NAME(self) -> str:
-        return "BASE SEPOLIA TESTNET" if self.USE_TESTNET else "BASE MAINNET"
 
     # ── CDP ───────────────────────────────────
     CDP_API_KEY_NAME: str     = os.getenv("CDP_API_KEY_NAME", "")
@@ -46,6 +32,7 @@ class Config:
 
     # ── Data Sources ──────────────────────────
     COINGECKO_API_KEY: str    = os.getenv("COINGECKO_API_KEY", "")
+    BASESCAN_API_KEY: str     = os.getenv("BASESCAN_API_KEY", "")
     TWITTER_BEARER_TOKEN: str = os.getenv("TWITTER_BEARER_TOKEN", "")
     DUNE_API_KEY: str         = os.getenv("DUNE_API_KEY", "")
 
