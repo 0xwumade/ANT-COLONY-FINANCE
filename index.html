@@ -440,6 +440,33 @@
       </div>
     </div>
 
+    <!-- Paper Portfolio -->
+    <div class="card">
+      <div class="card-label">📊 Paper Portfolio</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px;">
+        <div>
+          <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1px;">Portfolio Value</div>
+          <div id="portfolio-value" style="font-family:'Syne',sans-serif; font-size:20px; font-weight:800; color:var(--amber);">$1,000.00</div>
+        </div>
+        <div>
+          <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1px;">Total P&L</div>
+          <div id="portfolio-pnl" style="font-family:'Syne',sans-serif; font-size:20px; font-weight:800; color:var(--green);">+$0.00</div>
+        </div>
+        <div>
+          <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1px;">Win Rate</div>
+          <div id="portfolio-winrate" style="font-family:'Syne',sans-serif; font-size:16px; font-weight:800;">0%</div>
+        </div>
+        <div>
+          <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1px;">Total Trades</div>
+          <div id="portfolio-trades" style="font-family:'Syne',sans-serif; font-size:16px; font-weight:800;">0</div>
+        </div>
+      </div>
+      <div style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border);">
+        <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">Open Positions</div>
+        <div id="portfolio-positions" style="font-size:11px; color:var(--muted);">No open positions</div>
+      </div>
+    </div>
+
   </div>
 
   <!-- ── Onramp + CDP Grant Banner ───────────────────────────── -->
@@ -804,6 +831,45 @@ function openOnramp() {
   log('Onramp opened — funding $' + selectedAmount + ' USDC to ' + addr.slice(0,10) + '...', 'info');
 }
 
+// ── Portfolio Update ──────────────────────────────────────────────────
+async function updatePortfolio() {
+  try {
+    const response = await fetch('/api/portfolio');
+    if (!response.ok) return;
+    
+    const data = await response.json();
+    
+    // Update portfolio stats
+    document.getElementById('portfolio-value').textContent = '$' + data.total_value.toFixed(2);
+    
+    const pnl = data.total_pnl;
+    const pnlEl = document.getElementById('portfolio-pnl');
+    pnlEl.textContent = (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2);
+    pnlEl.style.color = pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    
+    document.getElementById('portfolio-winrate').textContent = data.win_rate.toFixed(1) + '%';
+    document.getElementById('portfolio-trades').textContent = data.total_trades;
+    
+    // Update positions
+    const posEl = document.getElementById('portfolio-positions');
+    if (data.positions && data.positions.length > 0) {
+      posEl.innerHTML = data.positions.map(pos => {
+        const pnl = pos.unrealized_pnl;
+        const pnlColor = pnl >= 0 ? 'var(--green)' : 'var(--red)';
+        return `<div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+          <span>${pos.symbol}</span>
+          <span style="color:${pnlColor};">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}</span>
+        </div>`;
+      }).join('');
+    } else {
+      posEl.innerHTML = '<span style="color:var(--muted);">No open positions</span>';
+    }
+  } catch (err) {
+    // Portfolio endpoint not available - using mock data
+    console.log('Portfolio API not available');
+  }
+}
+
 // ── Boot ──────────────────────────────────────────────────────────────
 spawnAnts();
 updateClock();
@@ -817,6 +883,10 @@ setTimeout(() => log('Swarm initialized — 5 castes active', 'info'), 2400);
 // Start simulation cycles
 setTimeout(() => simulateCycle(), 3000);
 setInterval(simulateCycle, 8000);
+
+// Update portfolio every 5 seconds
+setInterval(updatePortfolio, 5000);
+updatePortfolio();
 </script>
 
 <!-- Developer Credit Footer -->
