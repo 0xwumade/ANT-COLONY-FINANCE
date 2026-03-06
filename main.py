@@ -124,7 +124,7 @@ async def run_swarm_cycle(
 
 async def main(simulate: bool = False, paper: bool = False):
     logger.info("🐜 Ant Colony Finance starting up...")
-    logger.info(f"   Network:   Base ({settings.BASE_RPC_URL})")
+    logger.info(f"   Network:   {settings.NETWORK_NAME} ({settings.ACTIVE_RPC_URL})")
     logger.info(f"   Threshold: {settings.CONSENSUS_THRESHOLD:.0%}")
     logger.info(f"   Simulate:  {simulate}")
 

@@ -29,9 +29,17 @@ _colony_ok: bool = False
 # ─────────────────────────────────────────────────────────────────────
 
 async def handle_root(request):
-    html = Path("index.html")
-    if html.exists():
-        return web.Response(text=html.read_text(), content_type="text/html")
+    html_path = Path("index.html")
+    if html_path.exists():
+        html_content = html_path.read_text()
+        # Inject network name dynamically
+        try:
+            from settings import settings
+            network_name = settings.NETWORK_NAME
+            html_content = html_content.replace("BASE MAINNET", network_name)
+        except Exception:
+            pass
+        return web.Response(text=html_content, content_type="text/html")
     return web.Response(text="<h1>🐜 Colony booting...</h1>", content_type="text/html")
 
 
