@@ -91,6 +91,22 @@ class ColonyBrain:
         if self.redis:
             await self.redis.rpush(key, payload)
             await self.redis.expire(key, settings.SIGNAL_WINDOW_SECONDS * 2)
+            
+            # Publish to pub/sub for real-time dashboard
+            await self.redis.publish(
+                'colony:signals',
+                json.dumps({
+                    'type': 'signal',
+                    'data': {
+                        'token': token,
+                        'agent_id': signal.agent_id,
+                        'caste': signal.caste,
+                        'signal': signal.signal.value,
+                        'confidence': signal.confidence,
+                        'timestamp': time.time()
+                    }
+                })
+            )
 
         # Also buffer in-memory for immediate aggregation
         if token not in self._signal_buffer:
@@ -189,6 +205,15 @@ class ColonyBrain:
                 json.dumps(asdict(decision))
             )
             await self.redis.expire(REDIS_DECISIONS_KEY, 300)
+            
+            # Publish to pub/sub for real-time dashboard
+            await self.redis.publish(
+                'colony:decisions',
+                json.dumps({
+                    'type': 'decision',
+                    'data': asdict(decision)
+                })
+            )
 
         # Clear buffer after aggregation
         self._signal_buffer[token] = []

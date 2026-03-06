@@ -626,10 +626,99 @@ let cycle       = 0;
 let tradeCount  = 0;
 let signalQueue = [];
 const MAX_SIGNALS = 20;
+let ws = null;
+let useRealData = false;
 
 function randFloat(min, max) { return Math.random() * (max - min) + min; }
 function randInt(min, max)   { return Math.floor(randFloat(min, max)); }
 function pick(arr)           { return arr[randInt(0, arr.length)]; }
+
+// ── WebSocket Connection ──────────────────────────────────────────────
+function connectWebSocket() {
+  ws = new WebSocket('ws://localhost:8765/ws');
+  
+  ws.onopen = () => {
+    console.log('[WS] Connected to colony');
+    useRealData = true;
+    log('🔗 Connected to live colony data', 'info');
+  };
+  
+  ws.onmessage = (event) => {
+    try {
+      const message = JSON.parse(event.data);
+      handleColonyMessage(message);
+    } catch (e) {
+      console.error('[WS] Parse error:', e);
+    }
+  };
+  
+  ws.onerror = (error) => {
+    console.error('[WS] Error:', error);
+    useRealData = false;
+  };
+  
+  ws.onclose = () => {
+    console.log('[WS] Disconnected. Retrying in 5s...');
+    useRealData = false;
+    setTimeout(connectWebSocket, 5000);
+  };
+}
+
+function handleColonyMessage(message) {
+  if (message.type === 'signal') {
+    addSignalToFeed(message.data);
+  } else if (message.type === 'decision') {
+    updateDecisionPanel(message.data);
+  } else if (message.type === 'trade') {
+    log(`💰 Trade executed: ${message.data.action} ${message.data.token}`, 'success');
+  }
+}
+
+function addSignalToFeed(signal) {
+  const tbody = document.getElementById('signal-tbody');
+  const row = tbody.insertRow(0);
+  
+  const signalIcon = signal.signal === 'BUY' ? '▲' : signal.signal === 'SELL' ? '▼' : '●';
+  const signalColor = signal.signal === 'BUY' ? 'var(--green)' : signal.signal === 'SELL' ? 'var(--red)' : 'var(--yellow)';
+  
+  row.innerHTML = `
+    <td>${signal.token}</td>
+    <td>${signal.caste}</td>
+    <td style="color:${signalColor};">${signalIcon} ${signal.signal}</td>
+    <td>${(signal.confidence * 100).toFixed(0)}%</td>
+    <td>${new Date(signal.timestamp * 1000).toLocaleTimeString()}</td>
+  `;
+  
+  // Keep only last 20 signals
+  while (tbody.rows.length > MAX_SIGNALS) {
+    tbody.deleteRow(tbody.rows.length - 1);
+  }
+}
+
+function updateDecisionPanel(decision) {
+  document.getElementById('decision-action').textContent = decision.action;
+  document.getElementById('decision-action').style.color = 
+    decision.action === 'BUY' ? 'var(--green)' : 
+    decision.action === 'SELL' ? 'var(--red)' : 'var(--yellow)';
+  
+  document.getElementById('decision-token').textContent = decision.token;
+  document.getElementById('score-buy').textContent = (decision.buy_score * 100).toFixed(0) + '%';
+  document.getElementById('score-sell').textContent = (decision.sell_score * 100).toFixed(0) + '%';
+  document.getElementById('score-hold').textContent = (decision.hold_score * 100).toFixed(0) + '%';
+  document.getElementById('arc-label').textContent = (decision.confidence * 100).toFixed(0) + '%';
+  
+  // Update confidence arc
+  const arcFill = document.getElementById('arc-fill');
+  const offset = 314 - (314 * decision.confidence);
+  arcFill.style.strokeDashoffset = offset;
+  
+  if (decision.execute) {
+    document.getElementById('exec-badge').style.display = 'block';
+    setTimeout(() => {
+      document.getElementById('exec-badge').style.display = 'none';
+    }, 3000);
+  }
+}
 
 // ── Ant trail ─────────────────────────────────────────────────────────
 function spawnAnts() {
@@ -875,14 +964,21 @@ spawnAnts();
 updateClock();
 setInterval(updateClock, 1000);
 
+// Connect to live colony data
+connectWebSocket();
+
 log('🐜 Colony online. Agents spawning...', 'info');
 setTimeout(() => log('Connected to Base mainnet RPC', 'info'), 800);
 setTimeout(() => log('Redis pheromone bus connected', 'info'), 1600);
 setTimeout(() => log('Swarm initialized — 5 castes active', 'info'), 2400);
 
-// Start simulation cycles
-setTimeout(() => simulateCycle(), 3000);
-setInterval(simulateCycle, 8000);
+// Start simulation cycles (fallback if WebSocket fails)
+setTimeout(() => {
+  if (!useRealData) simulateCycle();
+}, 3000);
+setInterval(() => {
+  if (!useRealData) simulateCycle();
+}, 8000);
 
 // Update portfolio every 5 seconds
 setInterval(updatePortfolio, 5000);
