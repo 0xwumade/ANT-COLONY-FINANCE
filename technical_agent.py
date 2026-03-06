@@ -70,7 +70,7 @@ class TechnicalAgent(BaseAgent):
             async with aiohttp.ClientSession() as session:
                 headers = {}
                 if settings.COINGECKO_API_KEY:
-                    headers["x-cg-pro-api-key"] = settings.COINGECKO_API_KEY
+                    headers["x-cg-demo-api-key"] = settings.COINGECKO_API_KEY
 
                 url = f"{COINGECKO_BASE}/coins/{self.coingecko_id}/ohlc"
                 params = {"vs_currency": "usd", "days": "1"}
