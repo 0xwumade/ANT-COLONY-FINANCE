@@ -27,6 +27,7 @@ from discovery_agent import DiscoveryAgent
 from colony_brain import ColonyBrain
 from trader import ColonyTrader
 from portfolio import PaperPortfolio
+from ws_server import start_server, broadcast
 
 
 # ── Tokens to track ───────────────────────────────────────────────────
@@ -127,6 +128,9 @@ async def main(simulate: bool = False, paper: bool = False):
     logger.info(f"   Threshold: {settings.CONSENSUS_THRESHOLD:.0%}")
     logger.info(f"   Simulate:  {simulate}")
 
+    # ── Start live dashboard WebSocket server ─────────────────────────
+    ws_runner = await start_server()
+
     # Initialize infrastructure
     brain  = ColonyBrain()
     trader = ColonyTrader()
@@ -186,6 +190,24 @@ async def main(simulate: bool = False, paper: bool = False):
                         f"sell={decision.sell_score:.1%} "
                         f"agents={decision.signal_count})"
                     )
+            
+            # Broadcast to dashboard
+            await broadcast({
+                'type': 'cycle',
+                'cycle': cycle,
+                'tokens': [
+                    {
+                        'symbol': token['symbol'],
+                        'decision': {
+                            'action': results.get(token['symbol']).action if results.get(token['symbol']) else 'HOLD',
+                            'confidence': results.get(token['symbol']).confidence if results.get(token['symbol']) else 0,
+                            'buy_score': results.get(token['symbol']).buy_score if results.get(token['symbol']) else 0,
+                            'sell_score': results.get(token['symbol']).sell_score if results.get(token['symbol']) else 0,
+                        }
+                    }
+                    for token in TRACKED_TOKENS
+                ]
+            })
 
         except Exception as e:
             logger.error(f"[SWARM] Cycle {cycle} failed: {e}")

@@ -3,351 +3,118 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🐜 Ant Colony Finance — Colony Monitor</title>
+<title>🐜 Ant Colony Finance — Live Monitor</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap');
+:root {
+  --bg:#0a0a06; --surface:#111108; --border:#2a2a18;
+  --amber:#f5a623; --amber-dim:#7a5210;
+  --green:#4ade80; --red:#f87171; --yellow:#facc15;
+  --text:#e8e4d0; --muted:#6b6650;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:'Space Mono',monospace;font-size:13px;min-height:100vh;}
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 80% 50% at 20% 80%,rgba(245,166,35,0.04) 0%,transparent 60%),radial-gradient(ellipse 60% 40% at 80% 20%,rgba(245,166,35,0.03) 0%,transparent 50%);pointer-events:none;z-index:0;}
+.app{position:relative;z-index:1;padding:20px;max-width:1400px;margin:0 auto;}
 
-  :root {
-    --bg:         #0a0a06;
-    --surface:    #111108;
-    --border:     #2a2a18;
-    --amber:      #f5a623;
-    --amber-dim:  #7a5210;
-    --green:      #4ade80;
-    --red:        #f87171;
-    --yellow:     #facc15;
-    --text:       #e8e4d0;
-    --muted:      #6b6650;
-    --ant-trail:  rgba(245,166,35,0.08);
-  }
+/* Header */
+.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid var(--border);}
+.logo{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--amber);}
+.logo span{color:var(--muted);font-weight:400;}
+.status-bar{display:flex;align-items:center;gap:16px;font-size:11px;color:var(--muted);}
+.pulse{display:flex;align-items:center;gap:6px;}
+.pulse-dot{width:7px;height:7px;background:var(--green);border-radius:50%;animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.3;}}
+.conn-dot{width:7px;height:7px;border-radius:50%;background:var(--red);}
+.conn-dot.live{background:var(--green);}
 
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+/* Stats */
+.grid-top{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;}
+.card-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;}
+.card-value{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--text);}
+.card-sub{font-size:10px;color:var(--muted);margin-top:3px;}
+.green{color:var(--green);} .red{color:var(--red);} .amber{color:var(--amber);}
 
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: 'Space Mono', monospace;
-    font-size: 13px;
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
+/* Mid grid */
+.grid-mid{display:grid;grid-template-columns:1fr 320px;gap:12px;margin-bottom:12px;}
 
-  /* Animated ant trail background */
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background:
-      radial-gradient(ellipse 80% 50% at 20% 80%, rgba(245,166,35,0.04) 0%, transparent 60%),
-      radial-gradient(ellipse 60% 40% at 80% 20%, rgba(245,166,35,0.03) 0%, transparent 50%);
-    pointer-events: none;
-    z-index: 0;
-  }
+/* Signal table */
+.signal-table{width:100%;border-collapse:collapse;}
+.signal-table th{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;padding:8px 10px;border-bottom:1px solid var(--border);text-align:left;}
+.signal-table td{padding:7px 10px;border-bottom:1px solid rgba(42,42,24,0.5);font-size:11px;}
+.badge{display:inline-block;padding:2px 8px;border-radius:3px;font-size:10px;font-weight:700;letter-spacing:1px;}
+.badge-buy{background:rgba(74,222,128,0.15);color:var(--green);border:1px solid rgba(74,222,128,0.3);}
+.badge-sell{background:rgba(248,113,113,0.15);color:var(--red);border:1px solid rgba(248,113,113,0.3);}
+.badge-hold{background:rgba(250,204,21,0.1);color:var(--yellow);border:1px solid rgba(250,204,21,0.2);}
 
-  .app { position: relative; z-index: 1; padding: 24px; max-width: 1400px; margin: 0 auto; }
+/* Decision panel */
+.decision-panel{display:flex;flex-direction:column;gap:10px;}
+.decision-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;}
+.decision-action{font-family:'Syne',sans-serif;font-size:32px;font-weight:800;margin:6px 0;}
+.arc-wrap{display:flex;justify-content:center;margin:8px 0;}
+.arc-svg{transform:rotate(-90deg);}
+.arc-bg{fill:none;stroke:var(--border);stroke-width:8;}
+.arc-fill{fill:none;stroke:var(--amber);stroke-width:8;stroke-dasharray:220;stroke-dashoffset:220;stroke-linecap:round;transition:stroke-dashoffset 1s ease,stroke 0.5s ease;}
+.arc-label{position:absolute;font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:var(--text);}
+.arc-outer{position:relative;display:flex;align-items:center;justify-content:center;width:80px;height:80px;}
 
-  /* Header */
-  .header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 32px;
-    padding-bottom: 20px;
-    border-bottom: 1px solid var(--border);
-  }
+/* Portfolio */
+.pnl-pos{color:var(--green);} .pnl-neg{color:var(--red);}
 
-  .logo {
-    font-family: 'Syne', sans-serif;
-    font-size: 26px;
-    font-weight: 800;
-    letter-spacing: -0.5px;
-    color: var(--amber);
-  }
+/* Bottom grid */
+.grid-bottom{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.caste-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.caste-name{font-size:10px;color:var(--muted);width:75px;flex-shrink:0;}
+.caste-bar-wrap{flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden;}
+.caste-bar-fill{height:100%;border-radius:3px;transition:width 1s ease,background 0.5s ease;}
+.caste-pct{font-size:10px;color:var(--muted);width:32px;text-align:right;}
 
-  .logo span { color: var(--text); font-size: 14px; font-weight: 400; margin-left: 8px; opacity: 0.5; }
+/* Log */
+.log-feed{height:160px;overflow-y:auto;font-size:11px;}
+.log-entry{padding:4px 0;border-bottom:1px solid rgba(42,42,24,0.4);display:flex;gap:8px;}
+.log-time{color:var(--muted);flex-shrink:0;}
+.log-buy{color:var(--green);} .log-sell{color:var(--red);} .log-info{color:var(--muted);}
 
-  .status-bar {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    font-size: 11px;
-    color: var(--muted);
-  }
-
-  .pulse {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    color: var(--green);
-  }
-
-  .pulse-dot {
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: var(--green);
-    animation: pulse 2s ease-in-out infinite;
-  }
-
-  @keyframes pulse {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50%       { opacity: 0.4; transform: scale(0.7); }
-  }
-
-  /* Grid layout */
-  .grid-top    { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px; }
-  .grid-mid    { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 16px; }
-  .grid-bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-
-  /* Cards */
-  .card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 16px;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .card::after {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--amber-dim), transparent);
-    opacity: 0.5;
-  }
-
-  .card-label {
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 2px;
-    color: var(--muted);
-    margin-bottom: 8px;
-  }
-
-  .card-value {
-    font-family: 'Syne', sans-serif;
-    font-size: 28px;
-    font-weight: 800;
-    color: var(--amber);
-    line-height: 1;
-  }
-
-  .card-value.green { color: var(--green); }
-  .card-value.red   { color: var(--red); }
-
-  .card-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
-
-  /* Signal table */
-  .signal-table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-
-  .signal-table th {
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-    color: var(--muted);
-    text-align: left;
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .signal-table td {
-    padding: 10px 12px;
-    border-bottom: 1px solid rgba(42,42,24,0.5);
-    font-size: 12px;
-  }
-
-  .signal-table tr:hover td { background: var(--ant-trail); }
-
-  .badge {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 3px;
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-  }
-
-  .badge-buy    { background: rgba(74,222,128,0.15); color: var(--green); border: 1px solid rgba(74,222,128,0.3); }
-  .badge-sell   { background: rgba(248,113,113,0.15); color: var(--red);  border: 1px solid rgba(248,113,113,0.3); }
-  .badge-hold   { background: rgba(250,204,21,0.10); color: var(--yellow); border: 1px solid rgba(250,204,21,0.2); }
-  .badge-exec   { background: rgba(245,166,35,0.2);  color: var(--amber); border: 1px solid var(--amber-dim); }
-
-  /* Caste breakdown bars */
-  .caste-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 10px;
-  }
-
-  .caste-name {
-    width: 80px;
-    font-size: 11px;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    flex-shrink: 0;
-  }
-
-  .caste-bar-bg {
-    flex: 1;
-    height: 6px;
-    background: var(--border);
-    border-radius: 3px;
-    overflow: hidden;
-  }
-
-  .caste-bar-fill {
-    height: 100%;
-    border-radius: 3px;
-    transition: width 0.8s ease;
-  }
-
-  .fill-buy  { background: var(--green); }
-  .fill-sell { background: var(--red); }
-  .fill-hold { background: var(--amber-dim); }
-
-  .caste-pct {
-    width: 40px;
-    text-align: right;
-    font-size: 11px;
-    color: var(--amber);
-  }
-
-  /* Colony decision panel */
-  .decision-panel {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 20px;
-  }
-
-  .decision-action {
-    font-family: 'Syne', sans-serif;
-    font-size: 48px;
-    font-weight: 800;
-    line-height: 1;
-    margin-bottom: 4px;
-  }
-
-  .decision-action.BUY  { color: var(--green); }
-  .decision-action.SELL { color: var(--red); }
-  .decision-action.HOLD { color: var(--yellow); }
-
-  /* Confidence arc */
-  .confidence-arc {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    margin: 16px 0;
-  }
-
-  .arc-svg { transform: rotate(-90deg); }
-  .arc-bg   { fill: none; stroke: var(--border); stroke-width: 8; }
-  .arc-fill { fill: none; stroke-width: 8; stroke-linecap: round; transition: stroke-dashoffset 1s ease; }
-
-  .arc-label {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    text-align: center;
-    font-family: 'Syne', sans-serif;
-    font-size: 22px;
-    font-weight: 800;
-    color: var(--amber);
-  }
-
-  /* Log feed */
-  .log-feed {
-    height: 200px;
-    overflow-y: auto;
-    font-size: 11px;
-    color: var(--muted);
-    line-height: 1.8;
-  }
-
-  .log-feed::-webkit-scrollbar { width: 4px; }
-  .log-feed::-webkit-scrollbar-track { background: var(--border); }
-  .log-feed::-webkit-scrollbar-thumb { background: var(--amber-dim); }
-
-  .log-entry { display: flex; gap: 8px; }
-  .log-time  { color: var(--amber-dim); flex-shrink: 0; }
-  .log-buy   { color: var(--green); }
-  .log-sell  { color: var(--red); }
-  .log-hold  { color: var(--yellow); }
-  .log-info  { color: var(--muted); }
-
-  /* Ants animation */
-  .ant-trail-visual {
-    position: relative;
-    height: 20px;
-    background: linear-gradient(to right, rgba(251, 191, 36, 0.3), rgba(251, 191, 36, 0.5), rgba(251, 191, 36, 0.3));
-    border-radius: 10px;
-    overflow: visible;
-    margin: 16px 0 8px;
-    box-shadow: 0 0 10px rgba(251, 191, 36, 0.2);
-  }
-
-  .ant {
-    position: absolute;
-    font-size: 16px;
-    top: 0;
-    animation: march linear infinite;
-    transform: scaleX(-1);
-  }
-
-  @keyframes march {
-    from { left: -20px; opacity: 0; }
-    10%  { opacity: 1; }
-    90%  { opacity: 1; }
-    to   { left: calc(100% + 10px); opacity: 0; }
-  }
+/* Connection banner */
+.conn-banner{background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.3);border-radius:6px;padding:10px 14px;font-size:11px;color:var(--red);margin-bottom:12px;display:none;}
+.conn-banner.show{display:block;}
 </style>
 </head>
 <body>
 <div class="app">
 
-  <!-- Header -->
+  <div id="conn-banner" class="conn-banner">
+    ⚠ Connecting to colony... Dashboard will update automatically when connected.
+  </div>
+
   <div class="header">
     <div>
-      <div class="logo">🐜 ANT COLONY FINANCE <span>/ COLONY MONITOR</span></div>
-      <div style="font-size:11px; color: var(--muted); margin-top:4px;">
-        Swarm Intelligence Trading on Base Network
-      </div>
+      <div class="logo">🐜 ANT COLONY FINANCE <span>/ LIVE MONITOR</span></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:3px;">Swarm Intelligence Trading on Base Network</div>
     </div>
     <div class="status-bar">
-      <div class="pulse">
-        <div class="pulse-dot"></div>
-        COLONY ACTIVE
-      </div>
+      <div class="pulse"><div id="conn-dot" class="conn-dot"></div><span id="conn-label">CONNECTING</span></div>
       <div id="clock">--:--:--</div>
       <div>BASE MAINNET</div>
     </div>
   </div>
 
-  <!-- Top stats row -->
   <div class="grid-top">
     <div class="card">
       <div class="card-label">Active Agents</div>
-      <div class="card-value" id="stat-agents">0</div>
+      <div class="card-value" id="stat-agents">—</div>
       <div class="card-sub">across 5 castes</div>
     </div>
     <div class="card">
       <div class="card-label">Cycle</div>
-      <div class="card-value" id="stat-cycle">0</div>
+      <div class="card-value" id="stat-cycle">—</div>
       <div class="card-sub">completed cycles</div>
     </div>
     <div class="card">
-      <div class="card-label">Trades Executed</div>
-      <div class="card-value green" id="stat-trades">0</div>
-      <div class="card-sub">this session</div>
+      <div class="card-label">Portfolio Value</div>
+      <div class="card-value green" id="stat-value">$—</div>
+      <div class="card-sub" id="stat-pnl">paper trading</div>
     </div>
     <div class="card">
       <div class="card-label">Threshold</div>
@@ -356,658 +123,211 @@
     </div>
   </div>
 
-  <!-- Mid section -->
   <div class="grid-mid">
-
-    <!-- Signal feed table -->
     <div class="card">
-      <div class="card-label">Signal Feed — Recent Agent Votes</div>
-      <div class="ant-trail-visual" id="ant-trail">
-        <!-- ants injected by JS -->
-      </div>
-      <table class="signal-table">
-        <thead>
-          <tr>
-            <th>Token</th>
-            <th>Caste</th>
-            <th>Signal</th>
-            <th>Confidence</th>
-            <th>Time</th>
-          </tr>
-        </thead>
-        <tbody id="signal-tbody">
-          <!-- populated by JS -->
-        </tbody>
+      <div class="card-label">Signal Feed — Live Agent Votes</div>
+      <table class="signal-table" style="margin-top:10px;">
+        <thead><tr><th>Token</th><th>Action</th><th>Confidence</th><th>Agents</th><th>Time</th></tr></thead>
+        <tbody id="signal-tbody"><tr><td colspan="5" style="color:var(--muted);text-align:center;padding:20px;">Waiting for colony data...</td></tr></tbody>
       </table>
     </div>
 
-    <!-- Colony Decision Panel -->
     <div class="decision-panel">
-      <div class="card-label">Colony Decision</div>
-      <div class="decision-action" id="decision-action">HOLD</div>
-      <div style="font-size:11px; color:var(--muted); margin-bottom:12px;" id="decision-token">Waiting for consensus...</div>
-
-      <!-- Confidence arc -->
-      <div class="confidence-arc">
-        <svg width="120" height="120" class="arc-svg">
-          <circle class="arc-bg" cx="60" cy="60" r="50"/>
-          <circle class="arc-fill" id="arc-fill" cx="60" cy="60" r="50"
-            stroke="var(--amber)"
-            stroke-dasharray="314"
-            stroke-dashoffset="314"/>
-        </svg>
-        <div class="arc-label" id="arc-label">0%</div>
-      </div>
-
-      <div style="display:flex; justify-content:space-between; margin-bottom:16px; font-size:11px;">
-        <div>
-          <div style="color:var(--green);">▲ BUY</div>
-          <div id="score-buy" style="font-size:16px; font-family:'Syne',sans-serif; font-weight:800;">0%</div>
+      <div class="decision-card">
+        <div class="card-label">Colony Decision</div>
+        <div class="decision-action amber" id="decision-action">—</div>
+        <div style="font-size:11px;color:var(--muted);" id="decision-token">Waiting for consensus...</div>
+        <div class="arc-wrap">
+          <div class="arc-outer">
+            <svg width="80" height="80" class="arc-svg">
+              <circle class="arc-bg" cx="40" cy="40" r="35"/>
+              <circle class="arc-fill" id="arc-fill" cx="40" cy="40" r="35"/>
+            </svg>
+            <div class="arc-label" id="arc-label">—</div>
+          </div>
         </div>
-        <div style="text-align:center;">
-          <div style="color:var(--yellow);">● HOLD</div>
-          <div id="score-hold" style="font-size:16px; font-family:'Syne',sans-serif; font-weight:800;">0%</div>
-        </div>
-        <div style="text-align:right;">
-          <div style="color:var(--red);">▼ SELL</div>
-          <div id="score-sell" style="font-size:16px; font-family:'Syne',sans-serif; font-weight:800;">0%</div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;margin-top:4px;">
+          <div><div style="color:var(--green);">▲ BUY</div><div id="score-buy" style="font-family:'Syne',sans-serif;font-size:14px;font-weight:800;">—</div></div>
+          <div style="text-align:center;"><div style="color:var(--yellow);">● HOLD</div><div id="score-hold" style="font-family:'Syne',sans-serif;font-size:14px;font-weight:800;">—</div></div>
+          <div style="text-align:right;"><div style="color:var(--red);">▼ SELL</div><div id="score-sell" style="font-family:'Syne',sans-serif;font-size:14px;font-weight:800;">—</div></div>
         </div>
       </div>
 
-      <div id="exec-badge" style="display:none;">
-        <span class="badge badge-exec">⚡ EXECUTING TRADE</span>
+      <!-- Portfolio card -->
+      <div class="decision-card">
+        <div class="card-label">Paper Portfolio</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;">
+          <div><div style="font-size:10px;color:var(--muted);">VALUE</div><div id="port-value" style="font-family:'Syne',sans-serif;font-size:15px;font-weight:800;">$—</div></div>
+          <div><div style="font-size:10px;color:var(--muted);">P&L</div><div id="port-pnl" style="font-family:'Syne',sans-serif;font-size:15px;font-weight:800;">—</div></div>
+          <div><div style="font-size:10px;color:var(--muted);">CASH</div><div id="port-cash" style="font-size:12px;color:var(--muted);">$—</div></div>
+          <div><div style="font-size:10px;color:var(--muted);">TRADES</div><div id="port-trades" style="font-size:12px;color:var(--muted);">—</div></div>
+        </div>
       </div>
     </div>
-
   </div>
 
-  <!-- Bottom section -->
   <div class="grid-bottom">
-
-    <!-- Caste Breakdown -->
     <div class="card">
       <div class="card-label">Caste Pheromone Breakdown</div>
-      <div style="margin-top:14px;" id="caste-bars">
-        <!-- populated by JS -->
+      <div style="margin-top:12px;" id="caste-bars">
+        <div style="color:var(--muted);font-size:11px;">Waiting for data...</div>
       </div>
     </div>
-
-    <!-- Log Feed -->
     <div class="card">
       <div class="card-label">Colony Log</div>
       <div class="log-feed" id="log-feed">
-        <div class="log-entry"><span class="log-time">00:00:00</span><span class="log-info">Colony initialized. Waiting for swarm data...</span></div>
+        <div class="log-entry"><span class="log-time">--:--:--</span><span class="log-info">Connecting to colony on Railway...</span></div>
       </div>
     </div>
-
-    <!-- Paper Portfolio -->
-    <div class="card">
-      <div class="card-label">📊 Paper Portfolio</div>
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px;">
-        <div>
-          <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1px;">Portfolio Value</div>
-          <div id="portfolio-value" style="font-family:'Syne',sans-serif; font-size:20px; font-weight:800; color:var(--amber);">$1,000.00</div>
-        </div>
-        <div>
-          <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1px;">Total P&L</div>
-          <div id="portfolio-pnl" style="font-family:'Syne',sans-serif; font-size:20px; font-weight:800; color:var(--green);">+$0.00</div>
-        </div>
-        <div>
-          <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1px;">Win Rate</div>
-          <div id="portfolio-winrate" style="font-family:'Syne',sans-serif; font-size:16px; font-weight:800;">0%</div>
-        </div>
-        <div>
-          <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1px;">Total Trades</div>
-          <div id="portfolio-trades" style="font-family:'Syne',sans-serif; font-size:16px; font-weight:800;">0</div>
-        </div>
-      </div>
-      <div style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border);">
-        <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">Open Positions</div>
-        <div id="portfolio-positions" style="font-size:11px; color:var(--muted);">No open positions</div>
-      </div>
-    </div>
-
-  </div>
-
-  <!-- ── Onramp + CDP Grant Banner ───────────────────────────── -->
-  <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px;">
-
-    <!-- Fund Treasury via Coinbase Onramp -->
-    <div class="card" style="border-color: rgba(245,166,35,0.4);">
-      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;">
-        <div>
-          <div class="card-label">Fund Colony Treasury</div>
-          <div style="font-family:'Syne',sans-serif; font-size:18px; font-weight:800; color:var(--amber); margin-top:4px;">
-            Coinbase Onramp
-          </div>
-          <div style="font-size:11px; color:var(--muted); margin-top:4px; line-height:1.6;">
-            Deposit USDC directly from fiat into the<br>
-            colony treasury. Powered by Coinbase.<br>
-            <span style="color:var(--green);">✓ USDC on Base is free to buy & transfer</span>
-          </div>
-        </div>
-        <div style="font-size:28px; opacity:0.6;">💳</div>
-      </div>
-
-      <!-- Wallet address input -->
-      <div style="margin-bottom:12px;">
-        <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1.5px; margin-bottom:6px;">
-          Treasury Wallet Address
-        </div>
-        <input
-          id="onramp-address"
-          type="text"
-          placeholder="0xYourTreasuryAddress"
-          style="
-            width:100%; padding:8px 10px;
-            background:var(--bg); border:1px solid var(--border);
-            border-radius:4px; color:var(--text);
-            font-family:'Space Mono',monospace; font-size:11px;
-            outline:none;
-          "
-        />
-      </div>
-
-      <!-- Amount selector -->
-      <div style="display:flex; gap:8px; margin-bottom:14px;">
-        <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1.5px; margin-bottom:6px; grid-column:1/-1; width:100%;">Quick amounts</div>
-      </div>
-      <div style="display:flex; gap:8px; margin-bottom:14px;" id="amount-btns">
-        <button onclick="setAmount(50)"   class="amt-btn">$50</button>
-        <button onclick="setAmount(100)"  class="amt-btn">$100</button>
-        <button onclick="setAmount(250)"  class="amt-btn amt-selected">$250</button>
-        <button onclick="setAmount(500)"  class="amt-btn">$500</button>
-      </div>
-
-      <button onclick="openOnramp()" style="
-        width:100%; padding:11px;
-        background: linear-gradient(135deg, #f5a623, #e8940f);
-        border:none; border-radius:6px;
-        font-family:'Syne',sans-serif; font-size:14px; font-weight:800;
-        color:#0a0a06; cursor:pointer; letter-spacing:0.5px;
-        transition: opacity 0.2s;
-      " onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
-        ⚡ FUND TREASURY WITH COINBASE
-      </button>
-
-      <div style="font-size:10px; color:var(--muted); text-align:center; margin-top:8px;">
-        Opens Coinbase secure checkout · KYC handled by Coinbase
-      </div>
-    </div>
-
-    <!-- CDP Grant Status -->
-    <div class="card" style="border-color:rgba(74,222,128,0.25);">
-      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;">
-        <div>
-          <div class="card-label">CDP Builder Grant Readiness</div>
-          <div style="font-family:'Syne',sans-serif; font-size:18px; font-weight:800; color:var(--green); margin-top:4px;">
-            5 / 5 Complete
-          </div>
-        </div>
-        <div style="font-size:28px;">🏆</div>
-      </div>
-
-      <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px;">
-        <div class="grant-row">
-          <span class="grant-check green">✓</span>
-          <span class="grant-label">Built on Base network</span>
-          <span class="grant-status done">DONE</span>
-        </div>
-        <div class="grant-row">
-          <span class="grant-check green">✓</span>
-          <span class="grant-label">AI agent swarm (autonomous)</span>
-          <span class="grant-status done">DONE</span>
-        </div>
-        <div class="grant-row">
-          <span class="grant-check green">✓</span>
-          <span class="grant-label">CDP Swap API integration</span>
-          <span class="grant-status done">DONE</span>
-        </div>
-        <div class="grant-row">
-          <span class="grant-check green">✓</span>
-          <span class="grant-label">Onchain audit contract</span>
-          <span class="grant-status done">DONE</span>
-        </div>
-        <div class="grant-row">
-          <span class="grant-check green">✓</span>
-          <span class="grant-label">Coinbase Onramp integrated</span>
-          <span class="grant-status done">DONE</span>
-        </div>
-      </div>
-    </div>
-
   </div>
 </div>
 
-<style>
-  .amt-btn {
-    flex:1; padding:7px 4px;
-    background:var(--border); border:1px solid var(--border);
-    border-radius:4px; color:var(--muted);
-    font-family:'Space Mono',monospace; font-size:11px;
-    cursor:pointer; transition:all 0.15s;
-  }
-  .amt-btn:hover, .amt-btn.amt-selected {
-    background: rgba(245,166,35,0.15);
-    border-color: var(--amber-dim);
-    color: var(--amber);
-  }
-  .grant-row {
-    display:flex; align-items:center; gap:10px;
-    font-size:11px;
-  }
-  .grant-check { font-size:14px; width:18px; flex-shrink:0; }
-  .grant-check.green { color:var(--green); }
-  .grant-check.amber { color:var(--amber); }
-  .grant-label { flex:1; color:var(--text); }
-  .grant-status {
-    font-size:9px; font-weight:700; letter-spacing:1.5px;
-    padding:2px 6px; border-radius:3px;
-    text-transform:uppercase;
-  }
-  .grant-status.done    { background:rgba(74,222,128,0.12); color:var(--green); border:1px solid rgba(74,222,128,0.25); }
-  .grant-status.pending { background:rgba(245,166,35,0.12); color:var(--amber); border:1px solid var(--amber-dim); }
-</style>
-
 <script>
-// ── Simulation data (replace with real Redis/WebSocket feed in prod) ──
+// ── WebSocket connection ──────────────────────────────────────────────
+// Connects to the same host serving this page (Railway URL)
+const WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
 
-const CASTES = [
-  { name: "WHALE",     weight: 0.30 },
-  { name: "LIQUIDITY", weight: 0.25 },
-  { name: "TECHNICAL", weight: 0.20 },
-  { name: "ARBITRAGE", weight: 0.15 },
-  { name: "SENTIMENT", weight: 0.10 },
-];
-
-const TOKENS = ["BRETT", "AERO", "VIRTUAL", "WETH", "cbBTC"];
-
-let cycle       = 0;
-let tradeCount  = 0;
-let signalQueue = [];
-const MAX_SIGNALS = 20;
 let ws = null;
-let useRealData = false;
+let reconnectTimer = null;
+let cycleCount = 0;
 
-function randFloat(min, max) { return Math.random() * (max - min) + min; }
-function randInt(min, max)   { return Math.floor(randFloat(min, max)); }
-function pick(arr)           { return arr[randInt(0, arr.length)]; }
+function connect() {
+  ws = new WebSocket(WS_URL);
 
-// ── WebSocket Connection ──────────────────────────────────────────────
-function connectWebSocket() {
-  ws = new WebSocket('ws://localhost:8765/ws');
-  
   ws.onopen = () => {
-    console.log('[WS] Connected to colony');
-    useRealData = true;
-    log('🔗 Connected to live colony data', 'info');
+    document.getElementById('conn-dot').classList.add('live');
+    document.getElementById('conn-label').textContent = 'COLONY LIVE';
+    document.getElementById('conn-banner').classList.remove('show');
+    log('Connected to colony on Railway', 'info');
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
   };
-  
+
   ws.onmessage = (event) => {
     try {
-      const message = JSON.parse(event.data);
-      handleColonyMessage(message);
-    } catch (e) {
-      console.error('[WS] Parse error:', e);
-    }
+      const data = JSON.parse(event.data);
+      if (data.type === 'cycle') handleCycle(data);
+    } catch(e) { console.error('Parse error:', e); }
   };
-  
-  ws.onerror = (error) => {
-    console.error('[WS] Error:', error);
-    useRealData = false;
-  };
-  
+
   ws.onclose = () => {
-    console.log('[WS] Disconnected. Retrying in 5s...');
-    useRealData = false;
-    setTimeout(connectWebSocket, 5000);
+    document.getElementById('conn-dot').classList.remove('live');
+    document.getElementById('conn-label').textContent = 'RECONNECTING';
+    document.getElementById('conn-banner').classList.add('show');
+    log('Connection lost — reconnecting in 5s...', 'info');
+    reconnectTimer = setTimeout(connect, 5000);
   };
+
+  ws.onerror = () => ws.close();
 }
 
-function handleColonyMessage(message) {
-  if (message.type === 'signal') {
-    addSignalToFeed(message.data);
-  } else if (message.type === 'decision') {
-    updateDecisionPanel(message.data);
-  } else if (message.type === 'trade') {
-    log(`💰 Trade executed: ${message.data.action} ${message.data.token}`, 'success');
+// ── Handle incoming cycle data ────────────────────────────────────────
+function handleCycle(data) {
+  cycleCount = data.cycle;
+  document.getElementById('stat-cycle').textContent = data.cycle;
+  document.getElementById('stat-agents').textContent = (data.signals || []).length * 5;
+
+  // Signal feed
+  const signals = data.signals || [];
+  if (signals.length > 0) {
+    const tbody = document.getElementById('signal-tbody');
+    tbody.innerHTML = signals.slice().reverse().map(s => `
+      <tr>
+        <td style="color:var(--amber);font-weight:700">${s.token}</td>
+        <td><span class="badge badge-${s.action.toLowerCase()}">${s.action}</span></td>
+        <td>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <div style="width:50px;height:3px;background:var(--border);border-radius:2px;overflow:hidden;">
+              <div style="width:${(s.confidence*100).toFixed(0)}%;height:100%;background:${
+                s.action==='BUY'?'var(--green)':s.action==='SELL'?'var(--red)':'var(--yellow)'
+              };border-radius:2px;"></div>
+            </div>
+            <span style="color:var(--muted)">${(s.confidence*100).toFixed(0)}%</span>
+          </div>
+        </td>
+        <td style="color:var(--muted)">${s.agents}</td>
+        <td style="color:var(--muted)">${s.time}</td>
+      </tr>`).join('');
+  }
+
+  // Colony decision — use first token's decision
+  const decisions = data.decisions || {};
+  const tokens = Object.keys(decisions);
+  if (tokens.length > 0) {
+    const firstToken = tokens[0];
+    const d = decisions[firstToken];
+    const actionEl = document.getElementById('decision-action');
+    actionEl.textContent = d.action;
+    actionEl.className = 'decision-action ' + (d.action==='BUY'?'green':d.action==='SELL'?'red':'amber');
+    document.getElementById('decision-token').textContent = `Token: ${firstToken}`;
+    document.getElementById('score-buy').textContent  = (d.buy_score*100).toFixed(1)+'%';
+    document.getElementById('score-sell').textContent = (d.sell_score*100).toFixed(1)+'%';
+    document.getElementById('score-hold').textContent = (d.hold_score*100).toFixed(1)+'%';
+
+    const conf = d.confidence;
+    const circumference = 220;
+    const offset = circumference - (conf * circumference);
+    const arc = document.getElementById('arc-fill');
+    arc.style.strokeDashoffset = offset;
+    arc.style.stroke = d.action==='BUY'?'var(--green)':d.action==='SELL'?'var(--red)':'var(--yellow)';
+    document.getElementById('arc-label').textContent = (conf*100).toFixed(0)+'%';
+
+    if (d.execute) log(`⚡ COLONY ${d.action} → ${firstToken} (${(conf*100).toFixed(1)}%)`, d.action.toLowerCase());
+  }
+
+  // Caste breakdown
+  const castes = data.castes || {};
+  const casteNames = ['WHALE','LIQUIDITY','TECHNICAL','ARBITRAGE','SENTIMENT'];
+  const weights = {WHALE:30,LIQUIDITY:25,TECHNICAL:20,ARBITRAGE:15,SENTIMENT:10};
+  const casteBars = document.getElementById('caste-bars');
+  casteBars.innerHTML = casteNames.map(name => {
+    const c = castes[name] || {buy:0.5, sell:0.5};
+    const bullish = c.buy > c.sell;
+    const pct = Math.round(Math.abs(c.buy - c.sell) * 100);
+    const barColor = bullish ? 'var(--green)' : 'var(--red)';
+    return `
+      <div class="caste-row">
+        <div class="caste-name">${name}<br><span style="color:var(--amber);font-size:9px;">${weights[name]}%</span></div>
+        <div class="caste-bar-wrap">
+          <div class="caste-bar-fill" style="width:${Math.min(pct,100)}%;background:${barColor};"></div>
+        </div>
+        <div class="caste-pct" style="color:${barColor};">${bullish?'▲':'▼'} ${pct}%</div>
+      </div>`;
+  }).join('');
+
+  // Portfolio
+  const p = data.portfolio || {};
+  if (p.value) {
+    document.getElementById('stat-value').textContent = '$' + p.value.toFixed(2);
+    document.getElementById('stat-pnl').textContent = (p.pnl >= 0 ? '+' : '') + '$' + p.pnl.toFixed(2) + ' (' + p.pnl_pct.toFixed(1) + '%)';
+    document.getElementById('port-value').textContent = '$' + p.value.toFixed(2);
+    const pnlEl = document.getElementById('port-pnl');
+    pnlEl.textContent = (p.pnl >= 0 ? '+' : '') + '$' + p.pnl.toFixed(2);
+    pnlEl.className = p.pnl >= 0 ? 'pnl-pos' : 'pnl-neg';
+    document.getElementById('port-cash').textContent = '$' + p.cash.toFixed(2);
+    document.getElementById('port-trades').textContent = p.total_trades;
   }
 }
 
-function addSignalToFeed(signal) {
-  const tbody = document.getElementById('signal-tbody');
-  const row = tbody.insertRow(0);
-  
-  const signalIcon = signal.signal === 'BUY' ? '▲' : signal.signal === 'SELL' ? '▼' : '●';
-  const signalColor = signal.signal === 'BUY' ? 'var(--green)' : signal.signal === 'SELL' ? 'var(--red)' : 'var(--yellow)';
-  
-  row.innerHTML = `
-    <td>${signal.token}</td>
-    <td>${signal.caste}</td>
-    <td style="color:${signalColor};">${signalIcon} ${signal.signal}</td>
-    <td>${(signal.confidence * 100).toFixed(0)}%</td>
-    <td>${new Date(signal.timestamp * 1000).toLocaleTimeString()}</td>
-  `;
-  
-  // Keep only last 20 signals
-  while (tbody.rows.length > MAX_SIGNALS) {
-    tbody.deleteRow(tbody.rows.length - 1);
-  }
-}
-
-function updateDecisionPanel(decision) {
-  document.getElementById('decision-action').textContent = decision.action;
-  document.getElementById('decision-action').style.color = 
-    decision.action === 'BUY' ? 'var(--green)' : 
-    decision.action === 'SELL' ? 'var(--red)' : 'var(--yellow)';
-  
-  document.getElementById('decision-token').textContent = decision.token;
-  document.getElementById('score-buy').textContent = (decision.buy_score * 100).toFixed(0) + '%';
-  document.getElementById('score-sell').textContent = (decision.sell_score * 100).toFixed(0) + '%';
-  document.getElementById('score-hold').textContent = (decision.hold_score * 100).toFixed(0) + '%';
-  document.getElementById('arc-label').textContent = (decision.confidence * 100).toFixed(0) + '%';
-  
-  // Update confidence arc
-  const arcFill = document.getElementById('arc-fill');
-  const offset = 314 - (314 * decision.confidence);
-  arcFill.style.strokeDashoffset = offset;
-  
-  if (decision.execute) {
-    document.getElementById('exec-badge').style.display = 'block';
-    setTimeout(() => {
-      document.getElementById('exec-badge').style.display = 'none';
-    }, 3000);
-  }
-}
-
-// ── Ant trail ─────────────────────────────────────────────────────────
-function spawnAnts() {
-  const trail = document.getElementById('ant-trail');
-  trail.innerHTML = '';
-  for (let i = 0; i < 8; i++) {
-    const ant = document.createElement('div');
-    ant.className = 'ant';
-    ant.textContent = '🐜';
-    ant.style.animationDuration = randFloat(2, 5) + 's';
-    ant.style.animationDelay    = randFloat(0, 4) + 's';
-    trail.appendChild(ant);
-  }
+// ── Log helper ────────────────────────────────────────────────────────
+function log(msg, type='info') {
+  const feed = document.getElementById('log-feed');
+  const time = new Date().toLocaleTimeString();
+  const cls = type==='buy'?'log-buy':type==='sell'?'log-sell':'log-info';
+  const el = document.createElement('div');
+  el.className = 'log-entry';
+  el.innerHTML = `<span class="log-time">${time}</span><span class="${cls}">${msg}</span>`;
+  feed.insertBefore(el, feed.firstChild);
+  if (feed.children.length > 50) feed.removeChild(feed.lastChild);
 }
 
 // ── Clock ─────────────────────────────────────────────────────────────
-function updateClock() {
+setInterval(() => {
   document.getElementById('clock').textContent = new Date().toLocaleTimeString();
-}
-
-// ── Generate fake signal ──────────────────────────────────────────────
-function generateSignal() {
-  const signals   = ['BUY','SELL','HOLD'];
-  const weights   = [0.45, 0.35, 0.20];
-  const r         = Math.random();
-  let   signal    = 'HOLD';
-  let   cum       = 0;
-  for (let i = 0; i < signals.length; i++) {
-    cum += weights[i];
-    if (r < cum) { signal = signals[i]; break; }
-  }
-
-  return {
-    token:      pick(TOKENS),
-    caste:      pick(CASTES).name,
-    signal,
-    confidence: randFloat(0.3, 0.98),
-    time:       new Date().toLocaleTimeString(),
-  };
-}
-
-// ── Update signal table ───────────────────────────────────────────────
-function pushSignal(sig) {
-  signalQueue.unshift(sig);
-  if (signalQueue.length > MAX_SIGNALS) signalQueue.pop();
-
-  const tbody = document.getElementById('signal-tbody');
-  tbody.innerHTML = signalQueue.map(s => `
-    <tr>
-      <td style="color:var(--amber); font-weight:700">${s.token}</td>
-      <td style="color:var(--muted)">${s.caste}</td>
-      <td><span class="badge badge-${s.signal.toLowerCase()}">${s.signal}</span></td>
-      <td>
-        <div style="display:flex; align-items:center; gap:6px;">
-          <div style="width:50px; height:3px; background:var(--border); border-radius:2px; overflow:hidden;">
-            <div style="width:${(s.confidence*100).toFixed(0)}%; height:100%; background:${
-              s.signal==='BUY' ? 'var(--green)' : s.signal==='SELL' ? 'var(--red)' : 'var(--yellow)'
-            }; border-radius:2px;"></div>
-          </div>
-          <span style="color:var(--muted)">${(s.confidence*100).toFixed(0)}%</span>
-        </div>
-      </td>
-      <td style="color:var(--muted)">${s.time}</td>
-    </tr>
-  `).join('');
-}
-
-// ── Update colony decision ────────────────────────────────────────────
-function updateDecision(action, confidence, buyScore, sellScore, holdScore, token, execute) {
-  document.getElementById('decision-action').textContent = action;
-  document.getElementById('decision-action').className   = `decision-action ${action}`;
-  document.getElementById('decision-token').textContent  = `Token: ${token}`;
-
-  // Arc
-  const circumference = 314;
-  const offset = circumference - (confidence * circumference);
-  const arcFill = document.getElementById('arc-fill');
-  arcFill.style.strokeDashoffset = offset;
-  arcFill.style.stroke = action === 'BUY' ? 'var(--green)' : action === 'SELL' ? 'var(--red)' : 'var(--yellow)';
-  document.getElementById('arc-label').textContent = (confidence * 100).toFixed(0) + '%';
-
-  document.getElementById('score-buy').textContent  = (buyScore  * 100).toFixed(1) + '%';
-  document.getElementById('score-sell').textContent = (sellScore * 100).toFixed(1) + '%';
-  document.getElementById('score-hold').textContent = (holdScore * 100).toFixed(1) + '%';
-
-  const execBadge = document.getElementById('exec-badge');
-  execBadge.style.display = execute ? 'block' : 'none';
-
-  if (execute) tradeCount++;
-  document.getElementById('stat-trades').textContent = tradeCount;
-}
-
-// ── Update caste bars ─────────────────────────────────────────────────
-function updateCasteBars(casteData) {
-  const container = document.getElementById('caste-bars');
-  container.innerHTML = CASTES.map(c => {
-    const d   = casteData[c.name] || { buy: 0, sell: 0 };
-    const pct = ((d.buy - d.sell + 1) / 2 * 100).toFixed(0);
-    const cls = d.buy > d.sell ? 'fill-buy' : d.sell > d.buy ? 'fill-sell' : 'fill-hold';
-    return `
-      <div class="caste-row">
-        <div class="caste-name">${c.name}</div>
-        <div class="caste-bar-bg">
-          <div class="caste-bar-fill ${cls}" style="width:${pct}%"></div>
-        </div>
-        <div class="caste-pct">${pct}%</div>
-      </div>
-    `;
-  }).join('');
-}
-
-// ── Log ───────────────────────────────────────────────────────────────
-function log(msg, type = 'info') {
-  const feed = document.getElementById('log-feed');
-  const time = new Date().toLocaleTimeString();
-  const entry = document.createElement('div');
-  entry.className = 'log-entry';
-  entry.innerHTML = `<span class="log-time">${time}</span><span class="log-${type}">${msg}</span>`;
-  feed.insertBefore(entry, feed.firstChild);
-  if (feed.children.length > 50) feed.lastChild.remove();
-}
-
-// ── Simulation cycle ──────────────────────────────────────────────────
-function simulateCycle() {
-  cycle++;
-  document.getElementById('stat-cycle').textContent = cycle;
-  document.getElementById('stat-agents').textContent = CASTES.length * TOKENS.length * randInt(18, 25);
-
-  // Generate batch of signals
-  const batchSize = randInt(8, 20);
-  for (let i = 0; i < batchSize; i++) {
-    pushSignal(generateSignal());
-  }
-
-  // Compute fake consensus
-  const buySignals  = signalQueue.filter(s => s.signal === 'BUY').length;
-  const sellSignals = signalQueue.filter(s => s.signal === 'SELL').length;
-  const total       = signalQueue.length || 1;
-  const buyScore    = buySignals  / total;
-  const sellScore   = sellSignals / total;
-  const holdScore   = 1 - buyScore - sellScore;
-
-  let action     = 'HOLD';
-  let confidence = Math.max(buyScore, sellScore, holdScore);
-  if (buyScore >= 0.65)       action = 'BUY';
-  else if (sellScore >= 0.65) action = 'SELL';
-
-  const token   = pick(TOKENS);
-  const execute = action !== 'HOLD';
-
-  updateDecision(action, confidence, buyScore, sellScore, holdScore, token, execute);
-
-  // Caste breakdown
-  const casteData = {};
-  CASTES.forEach(c => {
-    casteData[c.name] = {
-      buy:  randFloat(0.1, 0.9),
-      sell: randFloat(0.1, 0.9),
-    };
-  });
-  updateCasteBars(casteData);
-
-  // Log
-  if (execute) {
-    log(`⚡ COLONY ${action} → ${token} (confidence: ${(confidence*100).toFixed(1)}%)`, action.toLowerCase());
-  } else {
-    log(`Cycle #${cycle} complete. ${batchSize} signals ingested. Consensus: HOLD`, 'hold');
-  }
-}
-
-
-// ── Onramp ─────────────────────────────────────────────────────────────
-let selectedAmount = 250;
-
-function setAmount(val) {
-  selectedAmount = val;
-  document.querySelectorAll('.amt-btn').forEach(b => {
-    b.classList.toggle('amt-selected', b.textContent === '$' + val);
-  });
-}
-
-function openOnramp() {
-  const addr = document.getElementById('onramp-address').value.trim();
-  if (!addr || !addr.startsWith('0x')) {
-    alert('Please enter your treasury wallet address (starts with 0x)');
-    return;
-  }
-  // Replace YOUR_CDP_PROJECT_ID with your actual project ID from the CDP portal
-  const projectId = '62a0465b-ab53-4a13-97f3-37376939d73d';
-  const addresses = encodeURIComponent(JSON.stringify({ [addr]: ['base'] }));
-  const assets    = encodeURIComponent(JSON.stringify(['USDC']));
-  const url = 'https://pay.coinbase.com/buy?appId=' + projectId
-    + '&addresses=' + addresses
-    + '&assets=' + assets
-    + '&defaultAsset=USDC'
-    + '&defaultNetwork=base'
-    + '&presetFiatAmount=' + selectedAmount;
-  window.open(url, '_blank', 'width=480,height=700,scrollbars=yes');
-  log('Onramp opened — funding $' + selectedAmount + ' USDC to ' + addr.slice(0,10) + '...', 'info');
-}
-
-// ── Portfolio Update ──────────────────────────────────────────────────
-async function updatePortfolio() {
-  try {
-    const response = await fetch('/api/portfolio');
-    if (!response.ok) return;
-    
-    const data = await response.json();
-    
-    // Update portfolio stats
-    document.getElementById('portfolio-value').textContent = '$' + data.total_value.toFixed(2);
-    
-    const pnl = data.total_pnl;
-    const pnlEl = document.getElementById('portfolio-pnl');
-    pnlEl.textContent = (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2);
-    pnlEl.style.color = pnl >= 0 ? 'var(--green)' : 'var(--red)';
-    
-    document.getElementById('portfolio-winrate').textContent = data.win_rate.toFixed(1) + '%';
-    document.getElementById('portfolio-trades').textContent = data.total_trades;
-    
-    // Update positions
-    const posEl = document.getElementById('portfolio-positions');
-    if (data.positions && data.positions.length > 0) {
-      posEl.innerHTML = data.positions.map(pos => {
-        const pnl = pos.unrealized_pnl;
-        const pnlColor = pnl >= 0 ? 'var(--green)' : 'var(--red)';
-        return `<div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-          <span>${pos.symbol}</span>
-          <span style="color:${pnlColor};">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}</span>
-        </div>`;
-      }).join('');
-    } else {
-      posEl.innerHTML = '<span style="color:var(--muted);">No open positions</span>';
-    }
-  } catch (err) {
-    // Portfolio endpoint not available - using mock data
-    console.log('Portfolio API not available');
-  }
-}
+}, 1000);
 
 // ── Boot ──────────────────────────────────────────────────────────────
-spawnAnts();
-updateClock();
-setInterval(updateClock, 1000);
-
-// Connect to live colony data
-connectWebSocket();
-
-log('🐜 Colony online. Agents spawning...', 'info');
-setTimeout(() => log('Connected to Base mainnet RPC', 'info'), 800);
-setTimeout(() => log('Redis pheromone bus connected', 'info'), 1600);
-setTimeout(() => log('Swarm initialized — 5 castes active', 'info'), 2400);
-
-// Start simulation cycles (fallback if WebSocket fails)
-setTimeout(() => {
-  if (!useRealData) simulateCycle();
-}, 3000);
-setInterval(() => {
-  if (!useRealData) simulateCycle();
-}, 8000);
-
-// Update portfolio every 5 seconds
-setInterval(updatePortfolio, 5000);
-updatePortfolio();
+document.getElementById('conn-banner').classList.add('show');
+connect();
 </script>
-
-<!-- Developer Credit Footer -->
-<div style="position: fixed; bottom: 16px; right: 16px; font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 12px; z-index: 100; background: rgba(10,10,6,0.8); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border);">
-  <span>Built by</span>
-  <span style="color: var(--amber); font-weight: 700; display: flex; align-items: center; gap: 4px;">
-    <span style="color: var(--amber);">⚡</span>
-    <span>wumade</span>
-  </span>
-  <span style="color: var(--border);">|</span>
-  <a href="https://x.com/0xwumade" target="_blank" rel="noopener noreferrer" title="X (Twitter)" style="color: var(--muted); text-decoration: none; transition: color 0.2s; display: flex; align-items: center;">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle;">
-      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-    </svg>
-  </a>
-  <a href="https://github.com/0xwumade" target="_blank" rel="noopener noreferrer" title="GitHub" style="color: var(--muted); text-decoration: none; transition: color 0.2s; display: flex; align-items: center;">
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="vertical-align: middle;">
-      <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
-    </svg>
-  </a>
-</div>
-
-<style>
-  a[href*="github.com"]:hover, a[href*="x.com"]:hover svg { color: var(--amber); }
-</style>
-
 </body>
 </html>
