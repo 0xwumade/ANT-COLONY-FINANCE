@@ -6,9 +6,9 @@ Go to your Railway project → Variables tab and add these:
 
 ### Network Configuration
 ```
-USE_TESTNET=true
+USE_TESTNET=false
 ```
-This will switch to Base Sepolia testnet where your contract is deployed.
+This will use Base Mainnet. Set to `true` for Base Sepolia testnet.
 
 ### CDP (Coinbase Developer Platform) Keys
 ```
@@ -45,16 +45,16 @@ These are automatically set when you add the Redis addon.
 
 1. ✅ **Colony is running** - Paper trading active
 2. ✅ **Server is responding** - No timeout errors
-3. ❌ **CDP keys invalid** - Trader falling back to simulation
-4. ❌ **Network mismatch** - Using mainnet but contract on testnet
+3. ❌ **CDP keys invalid** - Trader falling back to simulation (OK for paper trading)
+4. ✅ **Network set to mainnet** - Dashboard will show "BASE MAINNET"
 
 ## Fix Steps
 
-1. Set `USE_TESTNET=true` in Railway Variables
-2. Fix CDP keys format (see above)
+1. Set `USE_TESTNET=false` in Railway Variables (for Base Mainnet)
+2. Fix CDP keys format if you want real trading (optional for paper trading)
 3. Redeploy (Railway auto-deploys on variable changes)
-4. Dashboard will show "BASE SEPOLIA TESTNET"
-5. Trader will connect to CDP properly
+4. Dashboard will show "BASE MAINNET"
+5. Colony will track mainnet tokens and prices
 
 ## Testing CDP Keys Locally
 
