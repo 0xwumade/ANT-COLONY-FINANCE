@@ -72,6 +72,8 @@ Railway provides it for free inside your project.
 3. Railway creates a Redis instance and automatically
    sets the REDIS_URL variable — you don't have to do anything else
 
+The colony will automatically connect to Redis using the REDIS_URL environment variable.
+
 ---
 
 ## Step 5 — Add your environment variables
@@ -121,7 +123,25 @@ If you see those lines — the colony is live and running 24/7.
 
 ---
 
-## Step 7 — Check logs anytime
+## Step 7 — Access Your Dashboard
+
+Your colony is now running 24/7 on Railway! To view the dashboard:
+
+### Option 1: Local Dashboard (Recommended)
+1. Keep the colony running on Railway
+2. On your local PC, run: `python serve_dashboard.py`
+3. Open http://localhost:8000
+4. The dashboard will show your paper portfolio from Railway
+
+### Option 2: Deploy Dashboard to Railway (Advanced)
+Create a second Railway service for the dashboard:
+1. Add a new service from the same GitHub repo
+2. Set the start command to: `python serve_dashboard.py`
+3. Railway will give you a public URL
+4. Access your dashboard from anywhere!
+
+Note: The WebSocket real-time features work best when running locally.
+The paper portfolio will sync via the `paper_portfolio.json` file.
 
 You don't need to be at your PC to check what the colony is doing.
 
