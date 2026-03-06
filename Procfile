@@ -1,1 +1,1 @@
-web: python main.py --paper
+web: python app.py
