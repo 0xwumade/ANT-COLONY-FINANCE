@@ -1,0 +1,5 @@
+# Force Railway to rebuild
+__pycache__/
+*.pyc
+.venv/
+paper_portfolio.json
