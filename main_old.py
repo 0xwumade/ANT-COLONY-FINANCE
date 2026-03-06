@@ -26,11 +26,10 @@ from arbitrage_agent import ArbitrageAgent
 from discovery_agent import DiscoveryAgent
 from colony_brain import ColonyBrain
 from trader import ColonyTrader
-from portfolio import PaperPortfolio
 
 
 # ── Tokens to track ───────────────────────────────────────────────────
-# Seed tokens. Discovery agent will auto-add more from Aerodrome.
+# Add your tokens here: (symbol, address, coingecko_id, twitter_terms)
 TRACKED_TOKENS = [
     {
         "symbol":       "BRETT",
@@ -39,16 +38,10 @@ TRACKED_TOKENS = [
         "twitter":      ["$BRETT", "Brett Base token", "basedBrett"],
     },
     {
-        "symbol":       "AERO",
-        "address":      "0x940181a94A35A4569E4529A3CDfB74e38FD98631",
-        "coingecko_id": "aerodrome-finance",
-        "twitter":      ["$AERO", "Aerodrome Finance Base"],
-    },
-    {
-        "symbol":       "VIRTUAL",
-        "address":      "0x0b3e328455c4059EEb9e3f84b5543F74E24e7E1b",
-        "coingecko_id": "virtual-protocol",
-        "twitter":      ["$VIRTUAL", "Virtuals Protocol"],
+        "symbol":       "DEGEN",
+        "address":      "0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed",
+        "coingecko_id": "degen-base",
+        "twitter":      ["$DEGEN", "Degen token", "DegenChain"],
     },
 ]
 
@@ -121,7 +114,7 @@ async def run_swarm_cycle(
     return results
 
 
-async def main(simulate: bool = False, paper: bool = False):
+async def main(simulate: bool = False):
     logger.info("🐜 Ant Colony Finance starting up...")
     logger.info(f"   Network:   Base ({settings.BASE_RPC_URL})")
     logger.info(f"   Threshold: {settings.CONSENSUS_THRESHOLD:.0%}")
@@ -134,30 +127,24 @@ async def main(simulate: bool = False, paper: bool = False):
     await brain.connect()
     await trader.connect()
 
-    # ── Paper trading portfolio ───────────────────────────────────────
-    paper_portfolio = None
-    if paper:
-        paper_portfolio = PaperPortfolio(starting_balance=1_000.0)
-        paper_portfolio.load()
-        logger.info("[PAPER] Paper trading mode active — $1,000 virtual balance")
-
-    # ── Discovery agent ───────────────────────────────────────────────
-    async def on_new_token(token_config: dict):
-        """Called by DiscoveryAgent when a new token passes safety filters."""
-        sym = token_config["symbol"]
-        if any(t["symbol"] == sym for t in TRACKED_TOKENS):
-            return
-        TRACKED_TOKENS.append(token_config)
+    # Initialize discovery agent
+    async def add_discovered_token(token_config: dict):
+        """Callback for when discovery agent finds a new token."""
         logger.success(
-            f"[SWARM] 🆕 Token added to swarm: {sym} "
-            f"(TVL=${token_config.get('_tvl', 0):,.0f} "
-            f"vol_growth={token_config.get('_volume_growth', 0):.0%})"
+            f"[DISCOVERY] 🆕 Adding {token_config['symbol']} to swarm! "
+            f"TVL=${token_config.get('_tvl', 0):,.0f} "
+            f"Growth={token_config.get('_volume_growth', 0):.0%}"
         )
+        TRACKED_TOKENS.append(token_config)
 
-    discovery = DiscoveryAgent(on_new_token=on_new_token, scan_interval_seconds=300)
-    discovery.seed_known([t["address"] for t in TRACKED_TOKENS])
+    # Seed discovery agent with existing tokens to avoid duplicates
+    existing_addresses = [t["address"] for t in TRACKED_TOKENS]
+    discovery = DiscoveryAgent(on_new_token=add_discovered_token, scan_interval_seconds=300)
+    discovery.seed_known(existing_addresses)
+    
+    # Start discovery agent in background
     asyncio.create_task(discovery.run_forever())
-    logger.info("[SWARM] Discovery scout launched — scanning Aerodrome every 5 min")
+    logger.info("[DISCOVERY] Scout agent launched — scanning Aerodrome every 5 minutes")
 
     cycle = 0
     while True:
@@ -199,7 +186,6 @@ async def main(simulate: bool = False, paper: bool = False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Ant Colony Finance")
     parser.add_argument("--simulate", action="store_true", help="Simulate trades (no real execution)")
-    parser.add_argument("--paper", action="store_true", help="Paper trading mode — fake portfolio, real prices")
     args = parser.parse_args()
 
-    asyncio.run(main(simulate=args.simulate, paper=args.paper))
+    asyncio.run(main(simulate=args.simulate))
