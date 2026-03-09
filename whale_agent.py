@@ -1,117 +1,99 @@
 """
-agents/whale_agent.py — Tracks large wallet movements onchain
-
-Monitors wallet addresses holding >$100k in a token.
-If whales are accumulating → bullish signal.
-If whales are dumping    → bearish signal.
+agents/whale_agent.py — Large holder signals via Basescan token transfers
 """
-import asyncio
 import aiohttp
 from loguru import logger
 
 from base_agent import BaseAgent, PheromoneSignal, Signal
 from settings import settings
 
-
-# Known whale threshold: wallets holding more than this % of supply
-WHALE_THRESHOLD_USD = 100_000
-
-# Etherscan-compatible API for Base
-BASE_EXPLORER_API = "https://api.basescan.org/api"
+BASESCAN_API = "https://api.basescan.org/api"
+COINGECKO_BASE = "https://api.coingecko.com/api/v3"
 
 
 class WhaleAgent(BaseAgent):
-    """
-    Caste: WHALE (weight: 0.30)
-
-    Watches top holders of a token for:
-    - Large inflows  → BUY signal
-    - Large outflows → SELL signal
-    - No movement    → HOLD signal
-    """
-
     def __init__(self, token: str, token_address: str):
         super().__init__(token=token, caste="whale")
         self.token_address = token_address
         self._analysis: dict = {}
 
     async def analyze(self) -> dict:
-        """
-        Fetch recent large transfers for the token.
-        Compares buy vs sell pressure from whale-tier wallets.
-        """
         try:
             async with aiohttp.ClientSession() as session:
-                # Fetch recent token transfers
                 params = {
                     "module":          "token",
                     "action":          "tokentx",
                     "contractaddress": self.token_address,
                     "sort":            "desc",
-                    "offset":          50,    # last 50 transfers
+                    "offset":          50,
                     "apikey":          settings.BASESCAN_API_KEY or "YourApiKeyToken",
                 }
-                async with session.get(BASE_EXPLORER_API, params=params) as resp:
+                async with session.get(
+                    BASESCAN_API, params=params,
+                    timeout=aiohttp.ClientTimeout(total=10)
+                ) as resp:
                     data = await resp.json()
 
             transfers = data.get("result", [])
             if not isinstance(transfers, list):
                 transfers = []
 
-            buy_volume  = 0.0
-            sell_volume = 0.0
+            dex_routers = {
+                settings.UNISWAP_V3_ROUTER.lower(),
+                settings.AERODROME_ROUTER.lower(),
+                "0x4752ba5dbc23f44d87826276bf6fd6b1c372ad24",  # Uniswap v2 base
+            }
 
+            buy_vol = sell_vol = 0.0
             for tx in transfers:
                 try:
-                    value = float(tx.get("value", 0)) / (10 ** int(tx.get("tokenDecimal", 18)))
-                    # Rough heuristic: large transfers from known DEX routers = sell pressure
-                    if tx.get("from", "").lower() in [
-                        settings.UNISWAP_V3_ROUTER.lower(),
-                        settings.AERODROME_ROUTER.lower(),
-                    ]:
-                        sell_volume += value
+                    val = float(tx.get("value", 0)) / (10 ** int(tx.get("tokenDecimal", 18)))
+                    if tx.get("from", "").lower() in dex_routers:
+                        sell_vol += val
                     else:
-                        buy_volume += value
+                        buy_vol  += val
                 except (ValueError, KeyError):
                     continue
 
+            total = buy_vol + sell_vol or 1
             self._analysis = {
-                "buy_volume":  buy_volume,
-                "sell_volume": sell_volume,
-                "net_flow":    buy_volume - sell_volume,
+                "buy_volume":  buy_vol,
+                "sell_volume": sell_vol,
+                "net_flow":    buy_vol - sell_vol,
                 "tx_count":    len(transfers),
+                "buy_pct":     buy_vol / total,
             }
-            logger.debug(f"[WHALE:{self.agent_id}] {self.token} net_flow={self._analysis['net_flow']:.2f}")
+            logger.info(
+                f"[WHALE:{self.agent_id}] {self.token} "
+                f"txs={len(transfers)} buy={buy_vol:.0f} sell={sell_vol:.0f}"
+            )
 
         except Exception as e:
-            logger.warning(f"[WHALE:{self.agent_id}] Analysis failed: {e}. Using neutral.")
-            self._analysis = {"buy_volume": 0, "sell_volume": 0, "net_flow": 0, "tx_count": 0}
-
+            logger.warning(f"[WHALE:{self.agent_id}] Failed: {e}")
+            self._analysis = {
+                "buy_volume": 0, "sell_volume": 0,
+                "net_flow": 0, "tx_count": 0, "buy_pct": 0.5,
+            }
         return self._analysis
 
     async def emit(self) -> PheromoneSignal:
-        net_flow     = self._analysis.get("net_flow", 0)
-        buy_volume   = self._analysis.get("buy_volume", 1)
-        sell_volume  = self._analysis.get("sell_volume", 1)
-        total_volume = buy_volume + sell_volume or 1
+        net_flow = self._analysis.get("net_flow", 0)
+        buy_pct  = self._analysis.get("buy_pct", 0.5)
+        tx_count = self._analysis.get("tx_count", 0)
 
-        # Confidence scales with the magnitude of the imbalance
-        imbalance   = abs(net_flow) / total_volume
-        confidence  = min(imbalance * 1.5, 1.0)   # cap at 1.0
+        if tx_count == 0:
+            return PheromoneSignal(self.agent_id, self.caste, self.token,
+                Signal.HOLD, 0.05, metadata=self._analysis)
 
-        if net_flow > 0:
-            signal = Signal.BUY
-        elif net_flow < 0:
-            signal = Signal.SELL
-        else:
-            signal     = Signal.HOLD
-            confidence = 0.1   # low confidence on neutral
+        total = self._analysis.get("buy_volume", 1) + self._analysis.get("sell_volume", 1) or 1
+        imbalance  = abs(net_flow) / total
+        confidence = min(imbalance * 1.5, 1.0)
 
-        return PheromoneSignal(
-            agent_id   = self.agent_id,
-            caste      = self.caste,
-            token      = self.token,
-            signal     = signal,
-            confidence = confidence,
-            metadata   = self._analysis,
-        )
+        if buy_pct > 0.6:
+            return PheromoneSignal(self.agent_id, self.caste, self.token,
+                Signal.BUY, confidence, metadata=self._analysis)
+        elif buy_pct < 0.4:
+            return PheromoneSignal(self.agent_id, self.caste, self.token,
+                Signal.SELL, confidence, metadata=self._analysis)
+        return PheromoneSignal(self.agent_id, self.caste, self.token,
+            Signal.HOLD, 0.1, metadata=self._analysis)

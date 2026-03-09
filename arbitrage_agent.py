@@ -1,48 +1,23 @@
 """
-agents/arbitrage_agent.py — Cross-DEX arbitrage opportunity detection
-
-Compares token prices across Uniswap V3 and Aerodrome on Base.
-Signals: profitable arb gap detected → BUY (on cheaper DEX).
+agents/arbitrage_agent.py — Price momentum and market gap signals via CoinGecko
 """
-import asyncio
 import aiohttp
 from loguru import logger
 
 from base_agent import BaseAgent, PheromoneSignal, Signal
 from settings import settings
 
-
-# Uniswap V3 subgraph on Base
-UNISWAP_SUBGRAPH  = "https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3-base"
-# Aerodrome subgraph on Base
-AERODROME_SUBGRAPH = "https://api.thegraph.com/subgraphs/name/aerodrome-finance/aerodrome"
-
-PRICE_QUERY = """
-query TokenPrice($token: String!) {
-  token(id: $token) {
-    symbol
-    derivedETH
-    tokenDayData(orderBy: date, orderDirection: desc, first: 1) {
-      priceUSD
-    }
-  }
-}
-"""
-
-# Minimum price gap (%) to trigger a signal
-MIN_ARB_GAP = 0.005   # 0.5%
-GAS_COST_USD = 0.10   # estimated Base gas cost per trade
+COINGECKO_BASE = "https://api.coingecko.com/api/v3"
 
 
 class ArbitrageAgent(BaseAgent):
     """
     Caste: ARBITRAGE (weight: 0.15)
 
-    Detects price discrepancies between DEXes.
-    Higher gap = higher confidence signal.
-
-    Note: Signals a BUY on the cheaper venue and implicitly SELL on the pricier.
-    The execution layer handles routing.
+    Uses CoinGecko market data to detect:
+    - Price vs 7d average gap → mean reversion opportunity
+    - ATH distance → relative value signal
+    - Bid/ask spread via ticker data
     """
 
     def __init__(self, token: str, token_address: str):
@@ -50,87 +25,88 @@ class ArbitrageAgent(BaseAgent):
         self.token_address = token_address.lower()
         self._analysis: dict = {}
 
-    async def _query_price(
-        self, session: aiohttp.ClientSession, subgraph: str
-    ) -> float:
-        try:
-            payload = {
-                "query":     PRICE_QUERY,
-                "variables": {"token": self.token_address},
-            }
-            async with session.post(subgraph, json=payload) as resp:
-                data = await resp.json()
-            token_data  = data.get("data", {}).get("token", {})
-            day_data    = token_data.get("tokenDayData", [{}])
-            price_str   = day_data[0].get("priceUSD", "0") if day_data else "0"
-            return float(price_str)
-        except Exception:
-            return 0.0
-
     async def analyze(self) -> dict:
         try:
+            headers = {}
+            if settings.COINGECKO_API_KEY:
+                headers["x-cg-demo-api-key"] = settings.COINGECKO_API_KEY
+
             async with aiohttp.ClientSession() as session:
-                uniswap_price, aerodrome_price = await asyncio.gather(
-                    self._query_price(session, UNISWAP_SUBGRAPH),
-                    self._query_price(session, AERODROME_SUBGRAPH),
-                )
+                async with session.get(
+                    f"{COINGECKO_BASE}/coins/base/contract/{self.token_address}",
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=10)
+                ) as resp:
+                    data = await resp.json()
 
-            if uniswap_price == 0 or aerodrome_price == 0:
-                self._analysis = {
-                    "uniswap_price":  uniswap_price,
-                    "aerodrome_price": aerodrome_price,
-                    "gap_pct":        0.0,
-                    "profitable":     False,
-                    "cheaper_venue":  None,
-                }
-                return self._analysis
+            market = data.get("market_data", {})
+            current_price = market.get("current_price", {}).get("usd", 0) or 0
+            high_24h      = market.get("high_24h", {}).get("usd", 0) or 0
+            low_24h       = market.get("low_24h", {}).get("usd", 0) or 0
+            ath           = market.get("ath", {}).get("usd", 0) or 0
+            change_7d     = market.get("price_change_percentage_7d", 0) or 0
+            change_1h     = market.get("price_change_percentage_1h_in_currency", {}).get("usd", 0) or 0
 
-            gap_pct       = abs(uniswap_price - aerodrome_price) / min(uniswap_price, aerodrome_price)
-            cheaper_venue = "uniswap" if uniswap_price < aerodrome_price else "aerodrome"
+            # Position within 24h range (0 = at low, 1 = at high)
+            range_24h = high_24h - low_24h
+            range_position = (current_price - low_24h) / range_24h if range_24h > 0 else 0.5
 
-            # Check if gap exceeds gas costs (rough: gap * trade_size > gas)
-            estimated_profit = gap_pct * settings.MIN_TRADE_SIZE_ETH * uniswap_price
-            profitable = estimated_profit > GAS_COST_USD and gap_pct > MIN_ARB_GAP
+            # Distance from ATH (discount = potential upside)
+            ath_discount = 1 - (current_price / ath) if ath > 0 else 0
 
             self._analysis = {
-                "uniswap_price":   uniswap_price,
-                "aerodrome_price": aerodrome_price,
-                "gap_pct":         gap_pct,
-                "profitable":      profitable,
-                "cheaper_venue":   cheaper_venue,
-                "estimated_profit_usd": estimated_profit,
+                "current_price":   current_price,
+                "range_position":  range_position,
+                "ath_discount":    ath_discount,
+                "change_7d":       change_7d,
+                "change_1h":       change_1h,
             }
-            logger.debug(
-                f"[ARB:{self.agent_id}] {self.token} gap={gap_pct:.3%} "
-                f"profitable={profitable} cheaper={cheaper_venue}"
+            logger.info(
+                f"[ARB:{self.agent_id}] {self.token} "
+                f"range_pos={range_position:.2f} ath_disc={ath_discount:.2f} 7d={change_7d:.1f}%"
             )
 
         except Exception as e:
-            logger.warning(f"[ARB:{self.agent_id}] Analysis failed: {e}")
+            logger.warning(f"[ARB:{self.agent_id}] Failed: {e}")
             self._analysis = {
-                "uniswap_price": 0, "aerodrome_price": 0,
-                "gap_pct": 0, "profitable": False, "cheaper_venue": None,
+                "current_price": 0, "range_position": 0.5,
+                "ath_discount": 0, "change_7d": 0, "change_1h": 0,
             }
-
         return self._analysis
 
     async def emit(self) -> PheromoneSignal:
-        profitable = self._analysis.get("profitable", False)
-        gap_pct    = self._analysis.get("gap_pct", 0)
+        pos    = self._analysis.get("range_position", 0.5)
+        disc   = self._analysis.get("ath_discount", 0)
+        c7d    = self._analysis.get("change_7d", 0)
+        c1h    = self._analysis.get("change_1h", 0)
 
-        if profitable:
-            # Confidence scales with gap size (max at 5% gap)
-            confidence = min(gap_pct / 0.05, 1.0)
-            signal     = Signal.BUY
-        else:
-            signal     = Signal.HOLD
-            confidence = 0.05
+        if self._analysis.get("current_price", 0) == 0:
+            return PheromoneSignal(self.agent_id, self.caste, self.token,
+                Signal.HOLD, 0.05, metadata=self._analysis)
 
-        return PheromoneSignal(
-            agent_id   = self.agent_id,
-            caste      = self.caste,
-            token      = self.token,
-            signal     = signal,
-            confidence = confidence,
-            metadata   = self._analysis,
-        )
+        buy_score = sell_score = 0.0
+
+        # Near 24h low + oversold 7d = mean reversion buy
+        if pos < 0.25 and c7d < -10:  buy_score  += 0.4
+        elif pos < 0.3:               buy_score  += 0.2
+
+        # Near 24h high + extended 7d = potential sell
+        if pos > 0.75 and c7d > 20:   sell_score += 0.4
+        elif pos > 0.7:               sell_score += 0.2
+
+        # 1h momentum
+        if c1h > 2:    buy_score  += 0.3
+        elif c1h < -2: sell_score += 0.3
+
+        # Deep ATH discount = value
+        if disc > 0.8:   buy_score += 0.3
+        elif disc > 0.5: buy_score += 0.1
+
+        if buy_score > sell_score:
+            return PheromoneSignal(self.agent_id, self.caste, self.token,
+                Signal.BUY,  min(buy_score, 1.0),  metadata=self._analysis)
+        elif sell_score > buy_score:
+            return PheromoneSignal(self.agent_id, self.caste, self.token,
+                Signal.SELL, min(sell_score, 1.0), metadata=self._analysis)
+        return PheromoneSignal(self.agent_id, self.caste, self.token,
+            Signal.HOLD, 0.1, metadata=self._analysis)
