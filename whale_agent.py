@@ -9,8 +9,8 @@ import asyncio
 import aiohttp
 from loguru import logger
 
-from agents.base_agent import BaseAgent, PheromoneSignal, Signal
-from config.settings import settings
+from base_agent import BaseAgent, PheromoneSignal, Signal
+from settings import settings
 
 
 # Known whale threshold: wallets holding more than this % of supply

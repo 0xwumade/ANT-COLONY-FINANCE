@@ -38,7 +38,7 @@ class Config:
 
     # ── Swarm Parameters ──────────────────────
     SWARM_SIZE: int           = int(os.getenv("SWARM_SIZE", "100"))
-    CONSENSUS_THRESHOLD: float= float(os.getenv("CONSENSUS_THRESHOLD", "0.65"))
+    CONSENSUS_THRESHOLD: float= float(os.getenv("CONSENSUS_THRESHOLD", "0.45"))  # Lowered from 0.65 to 0.45
     SIGNAL_WINDOW_SECONDS: int= int(os.getenv("SIGNAL_WINDOW_SECONDS", "60"))
     MAX_TRADE_SIZE_ETH: float = float(os.getenv("MAX_TRADE_SIZE_ETH", "0.1"))
     MIN_TRADE_SIZE_ETH: float = float(os.getenv("MIN_TRADE_SIZE_ETH", "0.01"))
